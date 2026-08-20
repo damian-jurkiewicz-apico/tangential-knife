@@ -3,23 +3,15 @@
   
   Based on work by jejmule. https://github.com/jejmule/PostProcessor
   
-  For use with a Avid EX mill (Centroid Acorn control).
-  
-  Usage/Notes:
-  - Only tested using "2D Contour" toolpaths with a "tool diameter" of 0.1mm.
-  - Remove lead-in, lead-out, and chamfer options.
-  - The G02/G03 feeds are a calculation hack to provide a rotary axis feedrate equivalent to the commanded linear feedrate.
-      - There is probably a more graceful way to handle this (eg. inverse time), but this works for me.
-  - The code can attempt to force G0 rapid moves that are blocked in the free version of Fusion. This is not exhaustively tested, so proceed with caution.
-  
+  For use with TwinCAT (Q1=) and knife oriented towards +Y axis.
 */
 
-description = "Tangential Rotary Blade";
+description = "Tangential Rotary Blade (TwinCAT - Y Axis Knife)";
 vendor = "KBuchka";
 vendorUrl = "kbuchka@gmail.com";
 certificationLevel = 2;
 
-longDescription = "Tangential Rotary Blade support based on Jejmule's post. Modified for TwinCAT (Q1=) and G01 forces.";
+longDescription = "Tangential Rotary Blade support based on Jejmule's post. Modified for TwinCAT (Q1=) with knife aligned to +Y axis.";
 
 extension = "nc";
 setCodePage("ascii");
@@ -69,7 +61,7 @@ properties = {
   },
   useCalcAngularFeed: {
       title: "Use calculated angular feed",
-      description: "Enabling this will compute an angular feedrate for G02/03 moves that is equivalent to the specified linear feedrate. Used for controls that feed rotary axes in angle/time rather than distance/time (eg. Centroid Acorn).",
+      description: "Enabling this will compute an angular feedrate for G02/03 moves that is equivalent to the specified linear feedrate.",
       type: "boolean",
       value: true
   },
@@ -94,14 +86,14 @@ var gFormat = createFormat({prefix:"G", decimals:0, width:2, zeropad:true});
 var mFormat = createFormat({prefix:"M", decimals:0});
 
 var xyzFormat = createFormat({decimals:(unit == MM ? 3 : 4)});
-var abcFormat = createFormat({decimals:3, forceDecimal:true})//, scale:DEG});
+var abcFormat = createFormat({decimals:3, forceDecimal:true});
 var feedFormat = createFormat({decimals:(unit == MM ? 2 : 3)});
 
 var xOutput = createVariable({prefix:"X"}, xyzFormat);
 var yOutput = createVariable({prefix:"Y"}, xyzFormat);
 var zOutput = createVariable({prefix:"Z"}, xyzFormat);
 
-// MODYFIKACJA 1: Zmiana C na Q1=
+// Użycie nazewnictwa Q1= dla TwinCAT
 var cOutput = createVariable({prefix:"Q1="}, abcFormat);
 
 var iOutput = createReferenceVariable({prefix:"I"}, xyzFormat);
@@ -113,22 +105,23 @@ var gAbsIncModal = createModal({}, gFormat); // modal group 3 // G90-91
 
 var sequenceNumber = 0;
 
-//specific section for Tangential Rotary Blade
-var c_rad = toRad(0);  // Current A axis position
+// KNIFE ALIGNMENT OFFSET: -90 stopni (-PI/2 rad) ponieważ nóż patrzy na +Y
+var KNIFE_OFFSET_RAD = -Math.PI / 2.0;
+
+// Pozycja początkowa osi Q (pozycja bazowa z uwzględnieniem offsetu noża)
+var c_rad = KNIFE_OFFSET_RAD; 
 var isRapid = false;
 
 /**
  Update C position for Tangential Rotary Blade
  */
  function updateC(target_rad) {
-  var delta_rad = (target_rad-c_rad) //% (2*Math.PI)
+  var delta_rad = (target_rad-c_rad);
 
-  //next segment is colinear with current segment. Do nothing
   if (delta_rad % (2*Math.PI) == 0){
     return;
   }
   
-  // Angle between segments is larger than maximum angle. Lift blade, rotate, and plunge back down
   if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
     moveUp();
     gMotionModal.reset();
@@ -136,30 +129,25 @@ var isRapid = false;
     moveDown();
     c_rad = target_rad;
   }
-  else {  // Angle between segments is smaller than maximum angle. Rotate blade in material
+  else { 
     writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)));
     c_rad = target_rad;
   }
-  
  }
  
- /**
- Update C position for Tangential Rotary Blade with minimal superfluous rotations
+/**
+ Update C position with minimal rotations
  */
  function updateCminRotation(target_rad) {
-  var delta_rad = (target_rad-c_rad) //% (2*Math.PI)
+  var delta_rad = (target_rad-c_rad);
 
-  //next segment is colinear with current segment. Do nothing
   if (delta_rad % (2*Math.PI) == 0){
     return;
   }
   
-  // Angle between segments is larger than maximum angle. Lift blade, rotate, and plunge back down
   if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
     moveUp();
 
-    // Normalize current and target direction
-    // Javascript "%" is remainder, not modulo. This calc performs a true modulo.
     var currentNormalized = Math.abs(((c_rad % (2*Math.PI)) + (2*Math.PI)) % (2*Math.PI));
     var targetNormalized = Math.abs(((target_rad % (2*Math.PI)) + (2*Math.PI)) % (2*Math.PI));
     
@@ -173,24 +161,19 @@ var isRapid = false;
             gAbsIncModal.reset();
             if (currentNormalized < targetNormalized) {
                 writeDebug("Zero cross, current nearer 0");
-                // Current position is closer to 0, move in the negative direction
                 writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(-(currentNormalized + (2*Math.PI - targetNormalized)))));
             } else {
                 writeDebug("Zero cross, target nearer 0");
-                // Target position is closer to 0, move in the positive direction
                 writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg((targetNormalized+(2*Math.PI-currentNormalized)))));
             }
         } else {
             writeDebug("Inside 180 in normalized coords");
-            // Relative rotation is less than 180 degrees
             writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(deltaNormalized)));
         }
         writeBlock(gAbsIncModal.format(90));
-        // Force C-axis reset to commanded position
         writeBlock(gAbsIncModal.format(92), cOutput.format(toDeg(target_rad)));
     } else {
         writeDebug("Inside 180 in absolute coords");
-        // Absolute rotation is less than 180 degrees
         gMotionModal.reset();
         writeBlock(gMotionModal.format(0), cOutput.format(toDeg(target_rad)));
     }
@@ -198,11 +181,10 @@ var isRapid = false;
     moveDown();
     c_rad = target_rad;
   }
-  else {  // Angle between segments is smaller than maximum angle. Rotate blade in material
+  else { 
     writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)));
     c_rad = target_rad;
   }
-  
  }
 
 /**
@@ -216,39 +198,30 @@ var isRapid = false;
 /**
  Move cutter down to work height
  */
-
 function moveDown() {
-  plungePos = getCurrentPosition();
-  var z = zOutput.format(plungePos.z);
+  var z = zOutput.format(2); 
   if (z) {
-    gMotionModal.reset(); // Wymusza zapisanie G01
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    gMotionModal.reset(); 
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 50;
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
 
 /**
-  Writes the specified block.
+ Writes the specified block.
 */
 function writeBlock() {
   var blockStr = formatWords(arguments);
-  
 
   blockStr = blockStr.replace("G00", "G01");
-  
-
 
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
-
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
-
     blockStr += " F400"; 
   } 
-
   else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
     blockStr += " F1500"; 
   }
-  
 
   blockStr = blockStr.replace(/\s+/g, ' ').trim();
   
@@ -256,16 +229,10 @@ function writeBlock() {
   sequenceNumber += 1;
 }
 
-/**
-  Output a comment.
-*/
 function writeComment(text) {
   writeln("(" + text + ")");
 }
 
-/**
-  Output a debug message.
-*/
 function writeDebug(text) {
     if (getProperty("printDebug")) {
         writeComment(text);
@@ -279,10 +246,6 @@ function onOpen() {
   if (programComment) {
     writeComment(programComment);
   }
-
-  //writeBlock(gAbsIncModal.format(90));
-  //writeBlock(gFormat.format(64)); //G64 look forward option
-
 }
 
 function onSection() {
@@ -299,8 +262,9 @@ function onSection() {
     warningOnce(localize("Coolant not supported."), WARNING_COOLANT);
   }
 
-  // Zero C-axis rotation
-  writeBlock(gFormat.format(0),cOutput.format(0));
+  // Zresetowanie osi Q do -90 stopni na początku nowej sekcji (uwzględniając offset noża +Y)
+  c_rad = KNIFE_OFFSET_RAD;
+  writeBlock(gFormat.format(0), cOutput.format(toDeg(c_rad)));
   feedOutput.reset();
 }
 
@@ -320,10 +284,10 @@ function onLinear(_x, _y, _z, feed) {
   var start = getCurrentPosition();
   var target = new Vector(_x,_y,_z);
   var direction = Vector.diff(target,start);
-  //compute orientation of the upcoming segment
-  var orientation_rad = direction.getXYAngle();
   
-  // Gate C-axis rotation if move is purely in Z.
+  // ZMIANA: Dodano KNIFE_OFFSET_RAD do wyliczania kąta
+  var orientation_rad = direction.getXYAngle() + KNIFE_OFFSET_RAD;
+  
   if (!(start.x == _x && start.y == _y)) {
       if (getProperty("reduceRotations")) {
           updateCminRotation(orientation_rad);
@@ -332,10 +296,12 @@ function onLinear(_x, _y, _z, feed) {
       }
   }
   
-  // MODYFIKACJA 4: Obsługa osi Z podczas ruchów roboczych
-  var x = xOutput.format(_x);
+var x = xOutput.format(_x);
   var y = yOutput.format(_y);
-  var z = zOutput.format(_z);
+  // Jeśli Fusion chce zjechać poniżej zera (w materiał), wymuszamy Z = 2
+  var targetZ = (_z < 0) ? 2 : _z;
+  var z = zOutput.format(targetZ);
+
   if (x || y || z) {
     writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(feed));
   }
@@ -345,7 +311,6 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
 
   if (radius <= getProperty("minLinearRadius")) {
-    // Replace the arc move with a simple linear move to the endpoint.
     onLinear(x, y, x, feed);
     return;
   }
@@ -355,12 +320,9 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     if (hasParameter("operation:tolerance") && !getProperty("usePostTolerance")) {
       t = getParameter("operation:tolerance");
     }
-    // Replace the arc move with discrete linear steps
     linearize(t);
     return;
   }
-
-  // one of X/Y and I/J are required and likewise
 
   switch (getCircularPlane()) {
   case PLANE_XY:
@@ -368,14 +330,15 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     var arcAngle = getCircularSweep();
     
     var start = getCurrentPosition();
-    var OD = start;  //vector at current position
-    
+    var OD = start;
     var OC = getCircularCenter();
     
-    var Z = new Vector(0,0,clockwise ? 1 : -1);  //vector normal to XY plane
-    var CD = Vector.diff(OD,OC); //OD-OC = CO+OD = CD -> radius vector from arc center to current position
-    var tangent = Vector.cross(CD,Z); //tangent vector to circle in the direction of motion
-    var start_dir = tangent.getXYAngle(); //direction of the motion at starting point
+    var Z = new Vector(0,0,clockwise ? 1 : -1);
+    var CD = Vector.diff(OD,OC);
+    var tangent = Vector.cross(CD,Z);
+    
+    // ZMIANA: Dodano KNIFE_OFFSET_RAD do kierunku startowego na łuku
+    var start_dir = tangent.getXYAngle() + KNIFE_OFFSET_RAD;
 
     if (getProperty("reduceRotations")) {
         updateCminRotation(start_dir);
@@ -383,12 +346,11 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
         updateC(start_dir);
     }
 
-    
     if(clockwise){
-      c_rad -= arcAngle
+      c_rad -= arcAngle;
     }
     else {
-      c_rad += arcAngle
+      c_rad += arcAngle;
     }
     
     var outputFeed = feed;
@@ -407,7 +369,6 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   }
 }
 
-// Return the feed in degrees/time to hit the desired linear feedrate
 function calcAngularFeed(arcLength, arcAngle, linearFeed) {
     travelTime = arcLength/linearFeed;
     return toDeg(arcAngle)/travelTime;
@@ -415,7 +376,8 @@ function calcAngularFeed(arcLength, arcAngle, linearFeed) {
 
 function onSectionEnd() {
   moveUp();
-  writeBlock(gFormat.format(0),cOutput.format(0));
+  c_rad = KNIFE_OFFSET_RAD;
+  writeBlock(gFormat.format(0), cOutput.format(toDeg(c_rad)));
 }
 
 function onClose() {
