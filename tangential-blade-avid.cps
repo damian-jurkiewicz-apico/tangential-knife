@@ -199,10 +199,11 @@ var isRapid = false;
  Move cutter down to work height
  */
 function moveDown() {
-  var z = zOutput.format(2); 
+  plungePos = getCurrentPosition();
+  var z = zOutput.format(plungePos.z); 
   if (z) {
-    gMotionModal.reset(); 
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 50;
+    gMotionModal.reset();
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
@@ -262,9 +263,7 @@ function onSection() {
     warningOnce(localize("Coolant not supported."), WARNING_COOLANT);
   }
 
-  // Zresetowanie osi Q do -90 stopni na początku nowej sekcji (uwzględniając offset noża +Y)
   c_rad = KNIFE_OFFSET_RAD;
-  writeBlock(gFormat.format(0), cOutput.format(toDeg(c_rad)));
   feedOutput.reset();
 }
 
@@ -285,7 +284,7 @@ function onLinear(_x, _y, _z, feed) {
   var target = new Vector(_x,_y,_z);
   var direction = Vector.diff(target,start);
   
-
+  // ZMIANA: Dodano KNIFE_OFFSET_RAD do wyliczania kąta
   var orientation_rad = direction.getXYAngle() + KNIFE_OFFSET_RAD;
   
   if (!(start.x == _x && start.y == _y)) {
@@ -296,11 +295,9 @@ function onLinear(_x, _y, _z, feed) {
       }
   }
   
-var x = xOutput.format(_x);
+  var x = xOutput.format(_x);
   var y = yOutput.format(_y);
-  // Jeśli Fusion chce zjechać poniżej zera (w materiał), wymuszamy Z = 2
-  var targetZ = (_z < 0) ? 2 : _z;
-  var z = zOutput.format(targetZ);
+  var z = zOutput.format(_z); // Pobiera dokładną wysokość z Fusion 360
 
   if (x || y || z) {
     writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(feed));
@@ -358,7 +355,8 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
         outputFeed = calcAngularFeed(arcLength, arcAngle, feed);
     }
     
-    writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
+    feedOutput.reset(); 
+writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
     break;
   default:
     var t = tolerance;
@@ -376,8 +374,6 @@ function calcAngularFeed(arcLength, arcAngle, linearFeed) {
 
 function onSectionEnd() {
   moveUp();
-  c_rad = KNIFE_OFFSET_RAD;
-  writeBlock(gFormat.format(0), cOutput.format(toDeg(c_rad)));
 }
 
 function onClose() {
