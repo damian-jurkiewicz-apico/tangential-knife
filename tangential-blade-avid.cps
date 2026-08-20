@@ -19,7 +19,7 @@ vendor = "KBuchka";
 vendorUrl = "kbuchka@gmail.com";
 certificationLevel = 2;
 
-longDescription = "Tangential Rotary Blade support based on Jejmule's post.";
+longDescription = "Tangential Rotary Blade support based on Jejmule's post. Modified for TwinCAT (Q1=) and G01 forces.";
 
 extension = "nc";
 setCodePage("ascii");
@@ -101,7 +101,8 @@ var xOutput = createVariable({prefix:"X"}, xyzFormat);
 var yOutput = createVariable({prefix:"Y"}, xyzFormat);
 var zOutput = createVariable({prefix:"Z"}, xyzFormat);
 
-var cOutput = createVariable({prefix:"C"}, abcFormat);
+// MODYFIKACJA 1: Zmiana C na Q1=
+var cOutput = createVariable({prefix:"Q1="}, abcFormat);
 
 var iOutput = createReferenceVariable({prefix:"I"}, xyzFormat);
 var jOutput = createReferenceVariable({prefix:"J"}, xyzFormat);
@@ -215,22 +216,34 @@ var isRapid = false;
 /**
  Move cutter down to work height
  */
- function moveDown() {
+// MODYFIKACJA 2: Wolny zjazd w osi Z
+function moveDown() {
   plungePos = getCurrentPosition();
-  onRapid(plungePos.x,plungePos.y,plungePos.z);
- }
+  var z = zOutput.format(plungePos.z);
+  if (z) {
+    gMotionModal.reset(); // Wymusza zapisanie G01
+    // Pobiera posuw zagłębiania z parametrów (domyślnie 50, jeśli nie ustawiono)
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 50;
+    writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
+  }
+}
 
 /**
   Writes the specified block.
 */
+// MODYFIKACJA 3: Filtr na usunięcie G00 i doklejenie szybkiego posuwu
 function writeBlock() {
-  if (!isRapid || !getProperty("forceRapids")) { // Not a rapid move, not forcing rapids
-    writeWords2("N" + sequenceNumber, arguments);
-  } else {  // Rapid move 
-    isRapid = false;
-    newStr = formatWords(arguments).replace("G01", "G00")
-    writeln("N" + sequenceNumber + " " + newStr);
+  var blockStr = formatWords(arguments);
+  
+  // Wymuś zamianę każdego G00 na G01
+  blockStr = blockStr.replace("G00", "G01");
+  
+  // Jeśli to jest ruch G01, a brakuje w nim parametru posuwu (F), dodaj go
+  if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
+    blockStr += " F1500"; // Prędkość przejazdów (High Feedrate)
   }
+  
+  writeln("N" + sequenceNumber + " " + blockStr);
   sequenceNumber += 1;
 }
 
@@ -310,10 +323,12 @@ function onLinear(_x, _y, _z, feed) {
       }
   }
   
+  // MODYFIKACJA 4: Obsługa osi Z podczas ruchów roboczych
   var x = xOutput.format(_x);
   var y = yOutput.format(_y);
-  if (x || y) {
-    writeBlock(gMotionModal.format(1), x, y, feedOutput.format(feed));
+  var z = zOutput.format(_z);
+  if (x || y || z) {
+    writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(feed));
   }
 }
 
