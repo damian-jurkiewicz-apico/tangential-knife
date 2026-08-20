@@ -285,7 +285,7 @@ function onLinear(_x, _y, _z, feed) {
   var target = new Vector(_x,_y,_z);
   var direction = Vector.diff(target,start);
   
-  // ZMIANA: Dodano KNIFE_OFFSET_RAD do wyliczania kąta
+
   var orientation_rad = direction.getXYAngle() + KNIFE_OFFSET_RAD;
   
   if (!(start.x == _x && start.y == _y)) {
