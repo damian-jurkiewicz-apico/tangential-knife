@@ -216,14 +216,13 @@ var isRapid = false;
 /**
  Move cutter down to work height
  */
-// MODYFIKACJA 2: Wolny zjazd w osi Z
+
 function moveDown() {
   plungePos = getCurrentPosition();
   var z = zOutput.format(plungePos.z);
   if (z) {
     gMotionModal.reset(); // Wymusza zapisanie G01
-    // Pobiera posuw zagłębiania z parametrów (domyślnie 50, jeśli nie ustawiono)
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 50;
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
@@ -231,17 +230,27 @@ function moveDown() {
 /**
   Writes the specified block.
 */
-// MODYFIKACJA 3: Filtr na usunięcie G00 i doklejenie szybkiego posuwu
 function writeBlock() {
   var blockStr = formatWords(arguments);
   
-  // Wymuś zamianę każdego G00 na G01
+
   blockStr = blockStr.replace("G00", "G01");
   
-  // Jeśli to jest ruch G01, a brakuje w nim parametru posuwu (F), dodaj go
-  if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
-    blockStr += " F1500"; // Prędkość przejazdów (High Feedrate)
+
+
+  if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
+
+    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
+
+    blockStr += " F400"; 
+  } 
+
+  else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
+    blockStr += " F1500"; 
   }
+  
+
+  blockStr = blockStr.replace(/\s+/g, ' ').trim();
   
   writeln("N" + sequenceNumber + " " + blockStr);
   sequenceNumber += 1;
