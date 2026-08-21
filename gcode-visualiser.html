@@ -23,14 +23,21 @@
         .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; color: #ccc; }
         .checkbox-container input { cursor: pointer; }
 
-        textarea { width: 100%; height: 100px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; }
+        textarea { width: 100%; height: 140px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; white-space: pre; }
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
         .stats span { color: #4ec9b0; font-weight: bold; }
         #viewer-container { flex: 1; position: relative; }
         #canvas3d { width: 100%; height: 100%; display: block; }
+        
         #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; }
         .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+
+        /* Styl widżetu/manipulatora obrotu */
+        #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.75); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 5; }
+        .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
+        .pad-btn:hover { background: #0e639c; }
+        .pad-btn:active { background: #1177bb; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -79,6 +86,20 @@
 
 <div id="viewer-container">
     <canvas id="canvas3d"></canvas>
+    
+    <!-- Manipulator obrotu kamery (D-Pad) -->
+    <div id="rotation-pad">
+        <div></div>
+        <button class="pad-btn" onclick="rotateCamera(0, -15)" title="Rotate Up">▲</button>
+        <div></div>
+        <button class="pad-btn" onclick="rotateCamera(-15, 0)" title="Rotate Left">◄</button>
+        <button class="pad-btn" onclick="setView('home')" title="Reset View">⟲</button>
+        <button class="pad-btn" onclick="rotateCamera(15, 0)" title="Rotate Right">►</button>
+        <div></div>
+        <button class="pad-btn" onclick="rotateCamera(0, 15)" title="Rotate Down">▼</button>
+        <div></div>
+    </div>
+
     <div id="overlay">
         <div class="legend-item"><div class="legend-color" style="background:#00ff00"></div> Cutting moves (G1/G2/G3)</div>
         <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
@@ -89,6 +110,7 @@
 <script>
     const container = document.getElementById('viewer-container');
     const canvas = document.getElementById('canvas3d');
+    const textarea = document.getElementById('gcode-text');
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e1e);
@@ -103,15 +125,24 @@
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.screenSpacePanning = true;
+
+    // Likwidacja blokowania osi Z i zniekształcenia obrotu myszy:
+    controls.maxPolarAngle = Math.PI - 0.01; 
+    controls.minPolarAngle = 0.01;
 
     const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
     gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
     let pathGroup = new THREE.Group();
-    let labelsGroup = new THREE.Group(); // Grupa dla etykiet N
+    let labelsGroup = new THREE.Group();
     scene.add(pathGroup);
     scene.add(labelsGroup);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
 
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
@@ -121,43 +152,58 @@
     }
     setInitialCamera();
 
+    // Ręczny obrót kamery za pomocą przycisków manipulatora
+    function rotateCamera(angleDegX, angleDegY) {
+        const angleRadX = (angleDegX * Math.PI) / 180;
+        const angleRadY = (angleDegY * Math.PI) / 180;
+
+        // Obrót w poziomie wokół zdefiniowanego środka obrotu
+        const offset = camera.position.clone().sub(controls.target);
+        
+        // Azymut (X)
+        offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angleRadX);
+        
+        // Elewacja (Y)
+        const right = new THREE.Vector3().crossVectors(camera.up, offset).normalize();
+        offset.applyAxisAngle(right, angleRadY);
+
+        camera.position.copy(controls.target).add(offset);
+        controls.update();
+    }
+
     function setView(viewType) {
         const dist = defaultDistance;
+        camera.up.set(0, 0, 1);
+
         switch (viewType) {
             case 'top':
-                camera.position.set(currentTarget.x, currentTarget.y, currentTarget.z + dist);
-                camera.up.set(0, 1, 0);
+                camera.position.set(currentTarget.x, currentTarget.y - 0.001, currentTarget.z + dist);
                 break;
             case 'front':
                 camera.position.set(currentTarget.x, currentTarget.y - dist, currentTarget.z);
-                camera.up.set(0, 0, 1);
                 break;
             case 'side':
                 camera.position.set(currentTarget.x + dist, currentTarget.y, currentTarget.z);
-                camera.up.set(0, 0, 1);
                 break;
             case 'home':
             default:
                 camera.position.set(currentTarget.x + dist * 0.6, currentTarget.y - dist * 0.8, currentTarget.z + dist * 0.8);
-                camera.up.set(0, 0, 1);
                 break;
         }
         controls.target.copy(currentTarget);
         controls.update();
     }
 
-    // Tworzenie tekstury z tekstem na płótnie 2D dla obiektu THREE.Sprite
-    function createTextSprite(text) {
+    function createTextSprite(text, lineIndex) {
         const canvasText = document.createElement('canvas');
         const ctx = canvasText.getContext('2d');
         canvasText.width = 128;
         canvasText.height = 64;
 
-        ctx.fillStyle = 'rgba(255, 170, 0, 0.9)'; // Pomarańczowe tło dopasowane do linii Z
+        ctx.fillStyle = 'rgba(255, 170, 0, 0.9)';
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
         
-        // Zaokrąglony prostokąt
         ctx.beginPath();
         ctx.roundRect(4, 4, 120, 56, 8);
         ctx.fill();
@@ -173,10 +219,49 @@
         const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false });
         const sprite = new THREE.Sprite(spriteMaterial);
         
-        // Skalowanie wielkości napisów w przestrzeni 3D
         sprite.scale.set(12, 6, 1);
+        sprite.userData = { lineIndex: lineIndex };
+
         return sprite;
     }
+
+    function highlightGCodeLine(lineIndex) {
+        const text = textarea.value;
+        const lines = text.split('\n');
+
+        if (lineIndex < 0 || lineIndex >= lines.length) return;
+
+        let startPos = 0;
+        for (let i = 0; i < lineIndex; i++) {
+            startPos += lines[i].length + 1;
+        }
+        const endPos = startPos + lines[lineIndex].length;
+
+        textarea.focus();
+        textarea.setSelectionRange(startPos, endPos);
+
+        const lineHeight = 14; 
+        textarea.scrollTop = lineIndex * lineHeight - (textarea.clientHeight / 2);
+    }
+
+    canvas.addEventListener('click', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        
+        if (!labelsGroup.visible) return;
+
+        const intersects = raycaster.intersectObjects(labelsGroup.children);
+
+        if (intersects.length > 0) {
+            const clickedSprite = intersects[0].object;
+            if (clickedSprite.userData && clickedSprite.userData.lineIndex !== undefined) {
+                highlightGCodeLine(clickedSprite.userData.lineIndex);
+            }
+        }
+    });
 
     window.addEventListener('resize', () => {
         camera.aspect = container.clientWidth / container.clientHeight;
@@ -207,7 +292,6 @@
             let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
 
-            // Wyszukiwanie jawnego prefiksu N (np. N10) lub generowanie z indeksu linii
             const nMatch = line.match(/^N([0-9]+)/);
             const lineLabel = nMatch ? `N${nMatch[1]}` : `N${i + 1}`;
 
@@ -249,12 +333,10 @@
             const mat = isCutting ? cutMaterial : rapidMaterial;
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
-                // Wykrywanie pionowego podniesienia osi Z (X i Y pozostają bez zmian, Z rośnie)
                 const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
 
                 if (isPureZLift) {
-                    const sprite = createTextSprite(lineLabel);
-                    // Umieszczenie etykiety w połowie wysokości pionowej linii Z, z lekkim przesunięciem
+                    const sprite = createTextSprite(lineLabel, i);
                     sprite.position.set(curX + 3, curY + 3, (prevZ + curZ) / 2);
                     labelsGroup.add(sprite);
                 }
@@ -322,7 +404,6 @@
         }
     }
 
-    // Toggle widoczności numerów linii N
     document.getElementById('toggle-labels').addEventListener('change', (e) => {
         labelsGroup.visible = e.target.checked;
     });
@@ -332,16 +413,18 @@
         if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => {
-            document.getElementById('gcode-text').value = evt.target.result;
+            textarea.value = evt.target.result;
             parseGCode(evt.target.result);
         };
         reader.readAsText(file);
     });
 
     document.getElementById('parse-text-btn').addEventListener('click', () => {
-        const text = document.getElementById('gcode-text').value;
-        parseGCode(text);
+        parseGCode(textarea.value);
     });
+
+    textarea.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
+    textarea.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
 
     function animate() {
         requestAnimationFrame(animate);
