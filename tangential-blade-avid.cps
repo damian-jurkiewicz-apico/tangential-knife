@@ -203,7 +203,7 @@ function moveDown() {
   var z = zOutput.format(plungePos.z); 
   if (z) {
     gMotionModal.reset();
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 333;
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
@@ -214,18 +214,24 @@ function moveDown() {
 function writeBlock() {
   var blockStr = formatWords(arguments);
 
+  // Zamiana G00 na G01
   blockStr = blockStr.replace("G00", "G01");
 
+  // Jeśli w bloku jest Z, a nie ma X i Y (ruch pionowy), zassaj Plunge Feedrate z Fusion
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
-    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
-    blockStr += " F400"; 
+    // Jeśli Fusion przesłał posuw (F), zachowaj go! Jeśli nie, użyj tool.plungeFeedrate
+    if (blockStr.indexOf("F") === -1) {
+      var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 333;
+      blockStr += " F" + feedFormat.format(pFeed);
+    }
   } 
+  // Dla pozostałych ruchów G01 bez podanego F, zassaj Cutting Feedrate
   else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
-    blockStr += " F1500"; 
+    var cFeed = (tool.feedrate > 0) ? tool.feedrate : 999;
+    blockStr += " F" + feedFormat.format(cFeed);
   }
 
   blockStr = blockStr.replace(/\s+/g, ' ').trim();
-  
   writeln("N" + sequenceNumber + " " + blockStr);
   sequenceNumber += 1;
 }
