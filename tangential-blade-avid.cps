@@ -71,7 +71,7 @@ rotationFeedrate: {
       title: "Use calculated angular feed",
       description: "Enabling this will compute an angular feedrate for G02/03 moves that is equivalent to the specified linear feedrate.",
       type: "boolean",
-      value: true
+      value: false
   },
   reduceRotations: {
       title: "Reduce Rotations",
@@ -85,8 +85,6 @@ rotationFeedrate: {
       type: "boolean",
       value: false
   }
-
-
 };
 
 var WARNING_WORK_OFFSET = 0;
@@ -122,29 +120,45 @@ var KNIFE_OFFSET_RAD = -Math.PI / 2.0;
 var c_rad = KNIFE_OFFSET_RAD; 
 var isRapid = false;
 
+// Zmienne do buforowania nurkowania (Plunge)
+var pendingPlungeZ = undefined;
+var pendingPlungeFeed = undefined;
+
 /**
  Update C position for Tangential Rotary Blade
  */
 function updateC(target_rad) {
   var delta_rad = (target_rad - c_rad);
 
-  if (delta_rad % (2 * Math.PI) == 0) {
+  // Normalizacja do przedziału [-PI, PI]
+  var normalized_delta = delta_rad % (2 * Math.PI);
+  if (normalized_delta > Math.PI) normalized_delta -= 2 * Math.PI;
+  if (normalized_delta < -Math.PI) normalized_delta += 2 * Math.PI;
+
+  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3,
+  // aby pochłaniać małe wahania bez wywoływania przerw w ruchu (G01 F...).
+  if (Math.abs(normalized_delta) < 1e-3) {
+    c_rad += normalized_delta; 
     return;
   }
   
-  // Pobieramy prędkość bezpośrednio z Post Properties
   var rotFeed = getProperty("rotationFeedrate");
+  var isPhysicallyDown = (pendingPlungeZ === undefined);
 
-  if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
-    moveUp();
+  if (Math.abs(normalized_delta) > toRad(getProperty("liftAtCorner"))) { 
+    if (isPhysicallyDown) moveUp();
     gMotionModal.reset();
-    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
-    moveDown();
-    c_rad = target_rad;
+    c_rad += normalized_delta;
+    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(c_rad)), feedOutput.format(rotFeed));
+    if (isPhysicallyDown) moveDown();
   }
   else { 
-    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
-    c_rad = target_rad;
+    c_rad += normalized_delta;
+    var cStr = cOutput.format(toDeg(c_rad));
+    // Zabezpieczenie przed pisaniem pustych bloków (samo F666), które zatrzymują maszynę
+    if (cStr) {
+        writeBlock(gMotionModal.format(1), cStr, feedOutput.format(rotFeed));
+    }
   }
 }
  
@@ -154,15 +168,22 @@ function updateC(target_rad) {
 function updateCminRotation(target_rad) {
   var delta_rad = (target_rad - c_rad);
 
-  if (delta_rad % (2 * Math.PI) == 0) {
+  // Normalizacja do przedziału [-PI, PI]
+  var normalized_delta = delta_rad % (2 * Math.PI);
+  if (normalized_delta > Math.PI) normalized_delta -= 2 * Math.PI;
+  if (normalized_delta < -Math.PI) normalized_delta += 2 * Math.PI;
+
+  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3.
+  if (Math.abs(normalized_delta) < 1e-3) {
+    c_rad += normalized_delta; 
     return;
   }
   
-  // Pobieramy prędkość bezpośrednio z Post Properties
   var rotFeed = getProperty("rotationFeedrate");
+  var isPhysicallyDown = (pendingPlungeZ === undefined);
 
-  if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
-    moveUp();
+  if (Math.abs(normalized_delta) > toRad(getProperty("liftAtCorner"))) { 
+    if (isPhysicallyDown) moveUp();
 
     var currentNormalized = Math.abs(((c_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
     var targetNormalized = Math.abs(((target_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
@@ -188,21 +209,26 @@ function updateCminRotation(target_rad) {
         }
         writeBlock(gAbsIncModal.format(90));
         writeBlock(gAbsIncModal.format(92), cOutput.format(toDeg(target_rad)));
+        c_rad = target_rad; // G92 resetuje współrzędne, więc tu ustawiamy na sztywno
     } else {
         writeDebug("Inside 180 in absolute coords");
         gMotionModal.reset();
-        writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
+        // Zamiana z c_rad = target_rad na płynne przejście, by uniknąć przewijania o 360 st.
+        c_rad += normalized_delta;
+        writeBlock(gMotionModal.format(1), cOutput.format(toDeg(c_rad)), feedOutput.format(rotFeed));
     }
     
-    moveDown();
-    c_rad = target_rad;
+    if (isPhysicallyDown) moveDown();
   }
   else { 
-    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
-    c_rad = target_rad;
+    c_rad += normalized_delta;
+    var cStr = cOutput.format(toDeg(c_rad));
+    // Zapobieganie pustym blokom:
+    if (cStr) {
+        writeBlock(gMotionModal.format(1), cStr, feedOutput.format(rotFeed));
+    }
   }
 }
-
 
 /**
  Move cutter up to retract height
@@ -232,16 +258,13 @@ function moveDown() {
 function writeBlock() {
   var blockStr = formatWords(arguments);
 
-
   blockStr = blockStr.replace("G00", "G01");
-
 
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
     var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(pFeed);
   } 
-
   else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
     var cFeed = (tool.feedrate > 0) ? tool.feedrate : 1500;
     blockStr += " F" + feedFormat.format(cFeed);
@@ -291,6 +314,7 @@ function onSection() {
 
 function onRapid(_x, _y, _z) {
   isRapid = true;
+  pendingPlungeZ = undefined; // Wyczyść wstrzymany Plunge przy ruchu szybkim
   var x = xOutput.format(_x);
   var y = yOutput.format(_y);
   var z = zOutput.format(_z);
@@ -304,12 +328,22 @@ function onRapid(_x, _y, _z) {
 function onLinear(_x, _y, _z, feed) {
   var start = getCurrentPosition();
   var target = new Vector(_x,_y,_z);
-  var direction = Vector.diff(target,start);
   
-  // ZMIANA: Dodano KNIFE_OFFSET_RAD do wyliczania kąta
+  // ZAMROŻENIE OSI Z: Wyłapujemy czyste nurkowanie i je wstrzymujemy
+  if (start.x == _x && start.y == _y && _z < start.z) {
+      pendingPlungeZ = _z;
+      pendingPlungeFeed = feed;
+      return; 
+  }
+  
+  var direction = Vector.diff(target,start);
   var orientation_rad = direction.getXYAngle() + KNIFE_OFFSET_RAD;
   
-  if (!(start.x == _x && start.y == _y)) {
+  // Wykrywamy czy to ruch jałowy (Travel) na wysokości Retract
+  var retractZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : 15;
+  var isTravel = (start.z >= retractZ - 0.01) && (_z >= retractZ - 0.01);
+
+  if (!(start.x == _x && start.y == _y) && !isTravel) {
       if (getProperty("reduceRotations")) {
           updateCminRotation(orientation_rad);
       } else {
@@ -317,9 +351,20 @@ function onLinear(_x, _y, _z, feed) {
       }
   }
   
+  // UWOLNIENIE Z: Zrzucamy zamrożony ruch opuszczający po wykonaniu obrotu
+  if (pendingPlungeZ !== undefined) {
+      var zStr = zOutput.format(pendingPlungeZ);
+      if (zStr) {
+          gMotionModal.reset();
+          writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pendingPlungeFeed));
+      }
+      pendingPlungeZ = undefined;
+      pendingPlungeFeed = undefined;
+  }
+  
   var x = xOutput.format(_x);
   var y = yOutput.format(_y);
-  var z = zOutput.format(_z); // Pobiera dokładną wysokość z Fusion 360
+  var z = zOutput.format(_z); 
 
   if (x || y || z) {
     writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(feed));
@@ -356,13 +401,23 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     var CD = Vector.diff(OD,OC);
     var tangent = Vector.cross(CD,Z);
     
-    // ZMIANA: Dodano KNIFE_OFFSET_RAD do kierunku startowego na łuku
     var start_dir = tangent.getXYAngle() + KNIFE_OFFSET_RAD;
 
     if (getProperty("reduceRotations")) {
         updateCminRotation(start_dir);
     } else {
         updateC(start_dir);
+    }
+
+    // UWOLNIENIE Z dla łuków
+    if (pendingPlungeZ !== undefined) {
+        var zStr = zOutput.format(pendingPlungeZ);
+        if (zStr) {
+            gMotionModal.reset();
+            writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pendingPlungeFeed));
+        }
+        pendingPlungeZ = undefined;
+        pendingPlungeFeed = undefined;
     }
 
     if(clockwise){
@@ -378,7 +433,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     }
     
     feedOutput.reset(); 
-writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
+    writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
     break;
   default:
     var t = tolerance;
