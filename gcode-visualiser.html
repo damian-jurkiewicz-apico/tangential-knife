@@ -7,13 +7,21 @@
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { display: flex; height: 100vh; background-color: #1a1a1a; color: #ccc; overflow: hidden; }
-        #sidebar { width: 320px; background: #252526; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 10; }
+        #sidebar { width: 320px; background: #252526; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 10; overflow-y: auto; }
         .panel-section { padding: 15px; border-bottom: 1px solid #333; }
         h2 { font-size: 16px; color: #fff; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
         input[type="file"] { display: none; }
         .btn { display: block; width: 100%; padding: 10px; background: #0e639c; color: white; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; border: none; transition: background 0.2s; }
         .btn:hover { background: #1177bb; }
-        textarea { width: 100%; height: 120px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; }
+        
+        /* Grid Layout dla przycisków widoku */
+        .view-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .btn-secondary { background: #333; font-size: 12px; padding: 8px; }
+        .btn-secondary:hover { background: #444; }
+        .btn-home { grid-column: span 2; background: #2d8a4e; }
+        .btn-home:hover { background: #35a85f; }
+
+        textarea { width: 100%; height: 100px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; }
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
         .stats span { color: #4ec9b0; font-weight: bold; }
         #viewer-container { flex: 1; position: relative; }
@@ -34,10 +42,21 @@
         <input type="file" id="file-input" accept=".nc,.gcode,.tap,.txt">
     </div>
 
+    <!-- Nowa sekcja do przełączania widoków -->
+    <div class="panel-section">
+        <h2>Camera View</h2>
+        <div class="view-btn-grid">
+            <button class="btn btn-secondary" onclick="setView('top')">Top (XY)</button>
+            <button class="btn btn-secondary" onclick="setView('front')">Front (XZ)</button>
+            <button class="btn btn-secondary" onclick="setView('side')">Side (YZ)</button>
+            <button class="btn btn-home" onclick="setView('home')">Home (Isometric)</button>
+        </div>
+    </div>
+
     <div class="panel-section">
         <h2>Quick Paste</h2>
         <textarea id="gcode-text" placeholder="Paste G-code here..."></textarea>
-        <button class="btn" id="parse-text-btn" style="margin-top: 8px; background: #333;">Visualize Code</button>
+        <button class="btn btn-secondary" id="parse-text-btn" style="margin-top: 8px; width: 100%;">Visualize Code</button>
     </div>
 
     <div class="panel-section stats">
@@ -67,8 +86,10 @@
     scene.background = new THREE.Color(0x1e1e1e);
 
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
-    camera.position.set(100, -200, 200);
-    camera.up.set(0, 0, 1);
+    
+    // Zmienne do przechowywania środka modelu do resetu widoku
+    let currentTarget = new THREE.Vector3(0, 0, 0);
+    let defaultDistance = 300;
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
@@ -82,6 +103,43 @@
 
     let pathGroup = new THREE.Group();
     scene.add(pathGroup);
+
+    // Domyślne ustawienie kamery (Home)
+    function setInitialCamera() {
+        camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
+        camera.up.set(0, 0, 1);
+        controls.target.copy(currentTarget);
+        controls.update();
+    }
+    setInitialCamera();
+
+    // Funkcja do zmiany rzutowania kamery
+    function setView(viewType) {
+        const dist = defaultDistance;
+        
+        switch (viewType) {
+            case 'top': // Widok prostopadły do płaszczyzny XY (z góry)
+                camera.position.set(currentTarget.x, currentTarget.y, currentTarget.z + dist);
+                camera.up.set(0, 1, 0);
+                break;
+            case 'front': // Widok prostopadły do płaszczyzny XZ (od przodu)
+                camera.position.set(currentTarget.x, currentTarget.y - dist, currentTarget.z);
+                camera.up.set(0, 0, 1);
+                break;
+            case 'side': // Widok prostopadły do płaszczyzny YZ (z boku)
+                camera.position.set(currentTarget.x + dist, currentTarget.y, currentTarget.z);
+                camera.up.set(0, 0, 1);
+                break;
+            case 'home': // Widok domyślny izometryczny
+            default:
+                camera.position.set(currentTarget.x + dist * 0.6, currentTarget.y - dist * 0.8, currentTarget.z + dist * 0.8);
+                camera.up.set(0, 0, 1);
+                break;
+        }
+        
+        controls.target.copy(currentTarget);
+        controls.update();
+    }
 
     window.addEventListener('resize', () => {
         camera.aspect = container.clientWidth / container.clientHeight;
@@ -97,7 +155,7 @@
         const lines = gcode.split('\n');
         
         let curX = 0, curY = 0, curZ = 0, curQ = 0;
-        let motionMode = 'G01'; // G00, G01, G02, G03
+        let motionMode = 'G01';
         let pointsCount = 0;
         let rotations = 0;
 
@@ -151,7 +209,6 @@
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
                 if (motionMode === 'G02' || motionMode === 'G03') {
-                    // G02 / G03 Arc interpolation
                     const I = iMatch ? parseFloat(iMatch[1]) : 0;
                     const J = jMatch ? parseFloat(jMatch[1]) : 0;
 
@@ -181,7 +238,6 @@
                     const lineMesh = new THREE.Line(geometry, mat);
                     pathGroup.add(lineMesh);
                 } else {
-                    // Pure linear G00 / G01 moves
                     const geometry = new THREE.BufferGeometry().setFromPoints([
                         new THREE.Vector3(prevX, prevY, prevZ),
                         new THREE.Vector3(curX, curY, curZ)
@@ -196,7 +252,17 @@
         if (minX !== Infinity) {
             const centerX = (minX + maxX) / 2;
             const centerY = (minY + maxY) / 2;
-            controls.target.set(centerX, centerY, 0);
+            const centerZ = (minZ + maxZ) / 2;
+            
+            currentTarget.set(centerX, centerY, centerZ);
+            
+            // Dopasowanie dystansu kamery do rozmiarów wygenerowanego detalu
+            const sizeX = maxX - minX;
+            const sizeY = maxY - minY;
+            const maxDimension = Math.max(sizeX, sizeY, 50);
+            defaultDistance = maxDimension * 1.5;
+
+            setView('home');
             
             document.getElementById('stat-points').innerText = pointsCount;
             document.getElementById('stat-rotations').innerText = rotations;
