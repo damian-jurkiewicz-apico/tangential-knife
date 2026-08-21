@@ -20,7 +20,7 @@
         .btn-home { grid-column: span 2; background: #2d8a4e; }
         .btn-home:hover { background: #35a85f; }
 
-        .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; color: #ccc; }
+        .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; color: #ccc; margin-bottom: 6px; }
         .checkbox-container input { cursor: pointer; }
 
         textarea { width: 100%; height: 140px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; white-space: pre; }
@@ -33,7 +33,6 @@
         .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
 
-        /* Styl widżetu/manipulatora obrotu */
         #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.75); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 5; }
         .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
         .pad-btn:hover { background: #0e639c; }
@@ -64,7 +63,10 @@
     <div class="panel-section">
         <h2>Display Options</h2>
         <label class="checkbox-container">
-            <input type="checkbox" id="toggle-labels" checked> Show Z Lift Line Numbers (N)
+            <input type="checkbox" id="toggle-z-labels" checked> Show Z Lift Line Numbers (N)
+        </label>
+        <label class="checkbox-container">
+            <input type="checkbox" id="toggle-q-labels" checked> Show Knife Angle Line Numbers (N)
         </label>
     </div>
 
@@ -87,7 +89,6 @@
 <div id="viewer-container">
     <canvas id="canvas3d"></canvas>
     
-    <!-- Manipulator obrotu kamery (D-Pad) -->
     <div id="rotation-pad">
         <div></div>
         <button class="pad-btn" onclick="rotateCamera(0, -15)" title="Rotate Up">▲</button>
@@ -126,20 +127,32 @@
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
+    
+    // CAŁKOWITE ZABLOKOWANIE OBROTU MYSZĄ:
+    controls.enableRotate = false;
+    
+    // Zapewnienie przesuwania (Pan) oraz Zoomu rolką:
+    controls.enablePan = true;
+    controls.enableZoom = true;
     controls.screenSpacePanning = true;
 
-    // Likwidacja blokowania osi Z i zniekształcenia obrotu myszy:
-    controls.maxPolarAngle = Math.PI - 0.01; 
-    controls.minPolarAngle = 0.01;
+    // Przeciąganie lewym przyciskiem myszy domyślnie przesuwa widok (Pan)
+    controls.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.PAN
+    };
 
     const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
     gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
     let pathGroup = new THREE.Group();
-    let labelsGroup = new THREE.Group();
+    let zLabelsGroup = new THREE.Group();
+    let qLabelsGroup = new THREE.Group();
     scene.add(pathGroup);
-    scene.add(labelsGroup);
+    scene.add(zLabelsGroup);
+    scene.add(qLabelsGroup);
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
@@ -152,20 +165,22 @@
     }
     setInitialCamera();
 
-    // Ręczny obrót kamery za pomocą przycisków manipulatora
+    // Obrót realizowany WYŁĄCZNIE z poziomu przycisków
     function rotateCamera(angleDegX, angleDegY) {
         const angleRadX = (angleDegX * Math.PI) / 180;
         const angleRadY = (angleDegY * Math.PI) / 180;
 
-        // Obrót w poziomie wokół zdefiniowanego środka obrotu
         const offset = camera.position.clone().sub(controls.target);
         
-        // Azymut (X)
         offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angleRadX);
         
-        // Elewacja (Y)
         const right = new THREE.Vector3().crossVectors(camera.up, offset).normalize();
-        offset.applyAxisAngle(right, angleRadY);
+        const testOffset = offset.clone().applyAxisAngle(right, angleRadY);
+        
+        // Zabezpieczenie przed przejściem pod podłogę
+        if (testOffset.z >= 0.1) {
+            offset.copy(testOffset);
+        }
 
         camera.position.copy(controls.target).add(offset);
         controls.update();
@@ -180,10 +195,10 @@
                 camera.position.set(currentTarget.x, currentTarget.y - 0.001, currentTarget.z + dist);
                 break;
             case 'front':
-                camera.position.set(currentTarget.x, currentTarget.y - dist, currentTarget.z);
+                camera.position.set(currentTarget.x, currentTarget.y - dist, currentTarget.z + 0.1);
                 break;
             case 'side':
-                camera.position.set(currentTarget.x + dist, currentTarget.y, currentTarget.z);
+                camera.position.set(currentTarget.x + dist, currentTarget.y, currentTarget.z + 0.1);
                 break;
             case 'home':
             default:
@@ -194,13 +209,13 @@
         controls.update();
     }
 
-    function createTextSprite(text, lineIndex) {
+    function createTextSprite(text, lineIndex, bgColor = 'rgba(255, 170, 0, 0.9)') {
         const canvasText = document.createElement('canvas');
         const ctx = canvasText.getContext('2d');
         canvasText.width = 128;
         canvasText.height = 64;
 
-        ctx.fillStyle = 'rgba(255, 170, 0, 0.9)';
+        ctx.fillStyle = bgColor;
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 2;
         
@@ -210,7 +225,7 @@
         ctx.stroke();
 
         ctx.font = 'Bold 28px Monospace';
-        ctx.fillStyle = '#000000';
+        ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(text, 64, 32);
@@ -251,9 +266,11 @@
 
         raycaster.setFromCamera(mouse, camera);
         
-        if (!labelsGroup.visible) return;
+        let clickableObjects = [];
+        if (zLabelsGroup.visible) clickableObjects.push(...zLabelsGroup.children);
+        if (qLabelsGroup.visible) clickableObjects.push(...qLabelsGroup.children);
 
-        const intersects = raycaster.intersectObjects(labelsGroup.children);
+        const intersects = raycaster.intersectObjects(clickableObjects);
 
         if (intersects.length > 0) {
             const clickedSprite = intersects[0].object;
@@ -271,7 +288,8 @@
 
     function parseGCode(gcode) {
         while(pathGroup.children.length > 0){ pathGroup.remove(pathGroup.children[0]); }
-        while(labelsGroup.children.length > 0){ labelsGroup.remove(labelsGroup.children[0]); }
+        while(zLabelsGroup.children.length > 0){ zLabelsGroup.remove(zLabelsGroup.children[0]); }
+        while(qLabelsGroup.children.length > 0){ qLabelsGroup.remove(qLabelsGroup.children[0]); }
 
         const lines = gcode.split('\n');
         
@@ -323,6 +341,10 @@
                 const origin = new THREE.Vector3(curX, curY, curZ);
                 const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
                 pathGroup.add(arrowHelper);
+
+                const qSprite = createTextSprite(lineLabel, i, 'rgba(255, 0, 85, 0.9)');
+                qSprite.position.set(curX + Math.cos(rad) * (arrowLength + 4), curY + Math.sin(rad) * (arrowLength + 4), curZ);
+                qLabelsGroup.add(qSprite);
             }
 
             minX = Math.min(minX, curX); maxX = Math.max(maxX, curX);
@@ -336,9 +358,9 @@
                 const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
 
                 if (isPureZLift) {
-                    const sprite = createTextSprite(lineLabel, i);
+                    const sprite = createTextSprite(lineLabel, i, 'rgba(255, 170, 0, 0.9)');
                     sprite.position.set(curX + 3, curY + 3, (prevZ + curZ) / 2);
-                    labelsGroup.add(sprite);
+                    zLabelsGroup.add(sprite);
                 }
 
                 if (motionMode === 'G02' || motionMode === 'G03') {
@@ -404,8 +426,12 @@
         }
     }
 
-    document.getElementById('toggle-labels').addEventListener('change', (e) => {
-        labelsGroup.visible = e.target.checked;
+    document.getElementById('toggle-z-labels').addEventListener('change', (e) => {
+        zLabelsGroup.visible = e.target.checked;
+    });
+
+    document.getElementById('toggle-q-labels').addEventListener('change', (e) => {
+        qLabelsGroup.visible = e.target.checked;
     });
 
     document.getElementById('file-input').addEventListener('change', (e) => {
