@@ -35,6 +35,14 @@ properties = {
       type: "angle", 
       value: 0.5
   },
+
+rotationFeedrate: {
+      title: "Rotation Feedrate (Q1)",
+      description: "Speed for C/Q axis rotations in air.",
+      type: "number",
+      value: 666
+  },
+
   minLinearRadius: {
       title: "Minimum Radius", 
       description: "Absolute minimum radius allowable. Radii smaller than this will be clipped entirely with a linear move.", 
@@ -77,6 +85,8 @@ properties = {
       type: "boolean",
       value: false
   }
+
+
 };
 
 var WARNING_WORK_OFFSET = 0;
@@ -115,41 +125,47 @@ var isRapid = false;
 /**
  Update C position for Tangential Rotary Blade
  */
- function updateC(target_rad) {
-  var delta_rad = (target_rad-c_rad);
+function updateC(target_rad) {
+  var delta_rad = (target_rad - c_rad);
 
-  if (delta_rad % (2*Math.PI) == 0){
+  if (delta_rad % (2 * Math.PI) == 0) {
     return;
   }
   
+  // Pobieramy prędkość bezpośrednio z Post Properties
+  var rotFeed = getProperty("rotationFeedrate");
+
   if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
     moveUp();
     gMotionModal.reset();
-    writeBlock(gMotionModal.format(0), cOutput.format(toDeg(target_rad)));
+    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
     moveDown();
     c_rad = target_rad;
   }
   else { 
-    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)));
+    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
     c_rad = target_rad;
   }
- }
+}
  
 /**
  Update C position with minimal rotations
  */
- function updateCminRotation(target_rad) {
-  var delta_rad = (target_rad-c_rad);
+function updateCminRotation(target_rad) {
+  var delta_rad = (target_rad - c_rad);
 
-  if (delta_rad % (2*Math.PI) == 0){
+  if (delta_rad % (2 * Math.PI) == 0) {
     return;
   }
   
+  // Pobieramy prędkość bezpośrednio z Post Properties
+  var rotFeed = getProperty("rotationFeedrate");
+
   if (Math.abs(delta_rad) > toRad(getProperty("liftAtCorner"))) { 
     moveUp();
 
-    var currentNormalized = Math.abs(((c_rad % (2*Math.PI)) + (2*Math.PI)) % (2*Math.PI));
-    var targetNormalized = Math.abs(((target_rad % (2*Math.PI)) + (2*Math.PI)) % (2*Math.PI));
+    var currentNormalized = Math.abs(((c_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
+    var targetNormalized = Math.abs(((target_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
     
     var deltaNormalized = targetNormalized - currentNormalized;
     
@@ -161,31 +177,32 @@ var isRapid = false;
             gAbsIncModal.reset();
             if (currentNormalized < targetNormalized) {
                 writeDebug("Zero cross, current nearer 0");
-                writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(-(currentNormalized + (2*Math.PI - targetNormalized)))));
+                writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(-(currentNormalized + (2 * Math.PI - targetNormalized)))), feedOutput.format(rotFeed));
             } else {
                 writeDebug("Zero cross, target nearer 0");
-                writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg((targetNormalized+(2*Math.PI-currentNormalized)))));
+                writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg((targetNormalized + (2 * Math.PI - currentNormalized)))), feedOutput.format(rotFeed));
             }
         } else {
             writeDebug("Inside 180 in normalized coords");
-            writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(deltaNormalized)));
+            writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(deltaNormalized)), feedOutput.format(rotFeed));
         }
         writeBlock(gAbsIncModal.format(90));
         writeBlock(gAbsIncModal.format(92), cOutput.format(toDeg(target_rad)));
     } else {
         writeDebug("Inside 180 in absolute coords");
         gMotionModal.reset();
-        writeBlock(gMotionModal.format(0), cOutput.format(toDeg(target_rad)));
+        writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
     }
     
     moveDown();
     c_rad = target_rad;
   }
   else { 
-    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)));
+    writeBlock(gMotionModal.format(1), cOutput.format(toDeg(target_rad)), feedOutput.format(rotFeed));
     c_rad = target_rad;
   }
- }
+}
+
 
 /**
  Move cutter up to retract height
@@ -203,7 +220,8 @@ function moveDown() {
   var z = zOutput.format(plungePos.z); 
   if (z) {
     gMotionModal.reset();
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 333;
+    // Pobiera prędkość z opcji "Plunge Feedrate" w Fusion
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
@@ -214,20 +232,18 @@ function moveDown() {
 function writeBlock() {
   var blockStr = formatWords(arguments);
 
-  // Zamiana G00 na G01
+
   blockStr = blockStr.replace("G00", "G01");
 
-  // Jeśli w bloku jest Z, a nie ma X i Y (ruch pionowy), zassaj Plunge Feedrate z Fusion
+
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
-    // Jeśli Fusion przesłał posuw (F), zachowaj go! Jeśli nie, użyj tool.plungeFeedrate
-    if (blockStr.indexOf("F") === -1) {
-      var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 333;
-      blockStr += " F" + feedFormat.format(pFeed);
-    }
+    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
+    blockStr += " F" + feedFormat.format(pFeed);
   } 
-  // Dla pozostałych ruchów G01 bez podanego F, zassaj Cutting Feedrate
+
   else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
-    var cFeed = (tool.feedrate > 0) ? tool.feedrate : 999;
+    var cFeed = (tool.feedrate > 0) ? tool.feedrate : 1500;
     blockStr += " F" + feedFormat.format(cFeed);
   }
 
