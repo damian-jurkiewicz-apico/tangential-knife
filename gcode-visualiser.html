@@ -14,12 +14,14 @@
         .btn { display: block; width: 100%; padding: 10px; background: #0e639c; color: white; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; border: none; transition: background 0.2s; }
         .btn:hover { background: #1177bb; }
         
-        /* Grid Layout dla przycisków widoku */
         .view-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn-secondary { background: #333; font-size: 12px; padding: 8px; }
         .btn-secondary:hover { background: #444; }
         .btn-home { grid-column: span 2; background: #2d8a4e; }
         .btn-home:hover { background: #35a85f; }
+
+        .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; color: #ccc; }
+        .checkbox-container input { cursor: pointer; }
 
         textarea { width: 100%; height: 100px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; }
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
@@ -42,7 +44,6 @@
         <input type="file" id="file-input" accept=".nc,.gcode,.tap,.txt">
     </div>
 
-    <!-- Nowa sekcja do przełączania widoków -->
     <div class="panel-section">
         <h2>Camera View</h2>
         <div class="view-btn-grid">
@@ -51,6 +52,13 @@
             <button class="btn btn-secondary" onclick="setView('side')">Side (YZ)</button>
             <button class="btn btn-home" onclick="setView('home')">Home (Isometric)</button>
         </div>
+    </div>
+
+    <div class="panel-section">
+        <h2>Display Options</h2>
+        <label class="checkbox-container">
+            <input type="checkbox" id="toggle-labels" checked> Show Z Lift Line Numbers (N)
+        </label>
     </div>
 
     <div class="panel-section">
@@ -87,7 +95,6 @@
 
     const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
     
-    // Zmienne do przechowywania środka modelu do resetu widoku
     let currentTarget = new THREE.Vector3(0, 0, 0);
     let defaultDistance = 300;
 
@@ -102,9 +109,10 @@
     scene.add(gridHelper);
 
     let pathGroup = new THREE.Group();
+    let labelsGroup = new THREE.Group(); // Grupa dla etykiet N
     scene.add(pathGroup);
+    scene.add(labelsGroup);
 
-    // Domyślne ustawienie kamery (Home)
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
         camera.up.set(0, 0, 1);
@@ -113,32 +121,61 @@
     }
     setInitialCamera();
 
-    // Funkcja do zmiany rzutowania kamery
     function setView(viewType) {
         const dist = defaultDistance;
-        
         switch (viewType) {
-            case 'top': // Widok prostopadły do płaszczyzny XY (z góry)
+            case 'top':
                 camera.position.set(currentTarget.x, currentTarget.y, currentTarget.z + dist);
                 camera.up.set(0, 1, 0);
                 break;
-            case 'front': // Widok prostopadły do płaszczyzny XZ (od przodu)
+            case 'front':
                 camera.position.set(currentTarget.x, currentTarget.y - dist, currentTarget.z);
                 camera.up.set(0, 0, 1);
                 break;
-            case 'side': // Widok prostopadły do płaszczyzny YZ (z boku)
+            case 'side':
                 camera.position.set(currentTarget.x + dist, currentTarget.y, currentTarget.z);
                 camera.up.set(0, 0, 1);
                 break;
-            case 'home': // Widok domyślny izometryczny
+            case 'home':
             default:
                 camera.position.set(currentTarget.x + dist * 0.6, currentTarget.y - dist * 0.8, currentTarget.z + dist * 0.8);
                 camera.up.set(0, 0, 1);
                 break;
         }
-        
         controls.target.copy(currentTarget);
         controls.update();
+    }
+
+    // Tworzenie tekstury z tekstem na płótnie 2D dla obiektu THREE.Sprite
+    function createTextSprite(text) {
+        const canvasText = document.createElement('canvas');
+        const ctx = canvasText.getContext('2d');
+        canvasText.width = 128;
+        canvasText.height = 64;
+
+        ctx.fillStyle = 'rgba(255, 170, 0, 0.9)'; // Pomarańczowe tło dopasowane do linii Z
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        
+        // Zaokrąglony prostokąt
+        ctx.beginPath();
+        ctx.roundRect(4, 4, 120, 56, 8);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.font = 'Bold 28px Monospace';
+        ctx.fillStyle = '#000000';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, 64, 32);
+
+        const texture = new THREE.CanvasTexture(canvasText);
+        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+        const sprite = new THREE.Sprite(spriteMaterial);
+        
+        // Skalowanie wielkości napisów w przestrzeni 3D
+        sprite.scale.set(12, 6, 1);
+        return sprite;
     }
 
     window.addEventListener('resize', () => {
@@ -148,9 +185,8 @@
     });
 
     function parseGCode(gcode) {
-        while(pathGroup.children.length > 0){ 
-            pathGroup.remove(pathGroup.children[0]); 
-        }
+        while(pathGroup.children.length > 0){ pathGroup.remove(pathGroup.children[0]); }
+        while(labelsGroup.children.length > 0){ labelsGroup.remove(labelsGroup.children[0]); }
 
         const lines = gcode.split('\n');
         
@@ -167,8 +203,13 @@
         const rapidMaterial = new THREE.LineBasicMaterial({ color: 0xffaa00 });
 
         for (let i = 0; i < lines.length; i++) {
-            let line = lines[i].trim().toUpperCase();
+            let originalLine = lines[i].trim();
+            let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
+
+            // Wyszukiwanie jawnego prefiksu N (np. N10) lub generowanie z indeksu linii
+            const nMatch = line.match(/^N([0-9]+)/);
+            const lineLabel = nMatch ? `N${nMatch[1]}` : `N${i + 1}`;
 
             if (line.includes('G00') || line.includes('G0')) motionMode = 'G00';
             if (line.includes('G01') || line.includes('G1')) motionMode = 'G01';
@@ -208,6 +249,16 @@
             const mat = isCutting ? cutMaterial : rapidMaterial;
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
+                // Wykrywanie pionowego podniesienia osi Z (X i Y pozostają bez zmian, Z rośnie)
+                const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
+
+                if (isPureZLift) {
+                    const sprite = createTextSprite(lineLabel);
+                    // Umieszczenie etykiety w połowie wysokości pionowej linii Z, z lekkim przesunięciem
+                    sprite.position.set(curX + 3, curY + 3, (prevZ + curZ) / 2);
+                    labelsGroup.add(sprite);
+                }
+
                 if (motionMode === 'G02' || motionMode === 'G03') {
                     const I = iMatch ? parseFloat(iMatch[1]) : 0;
                     const J = jMatch ? parseFloat(jMatch[1]) : 0;
@@ -256,7 +307,6 @@
             
             currentTarget.set(centerX, centerY, centerZ);
             
-            // Dopasowanie dystansu kamery do rozmiarów wygenerowanego detalu
             const sizeX = maxX - minX;
             const sizeY = maxY - minY;
             const maxDimension = Math.max(sizeX, sizeY, 50);
@@ -271,6 +321,11 @@
             document.getElementById('stat-z').innerText = `${minZ.toFixed(1)} / ${maxZ.toFixed(1)}`;
         }
     }
+
+    // Toggle widoczności numerów linii N
+    document.getElementById('toggle-labels').addEventListener('change', (e) => {
+        labelsGroup.visible = e.target.checked;
+    });
 
     document.getElementById('file-input').addEventListener('change', (e) => {
         const file = e.target.files[0];
