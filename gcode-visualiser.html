@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>G-Code Visualizer (TwinCAT Tangential Knife)</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { display: flex; height: 100vh; background-color: #1a1a1a; color: #ccc; overflow: hidden; }
+        #sidebar { width: 320px; background: #252526; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 10; }
+        .panel-section { padding: 15px; border-bottom: 1px solid #333; }
+        h2 { font-size: 16px; color: #fff; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+        input[type="file"] { display: none; }
+        .btn { display: block; width: 100%; padding: 10px; background: #0e639c; color: white; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; border: none; transition: background 0.2s; }
+        .btn:hover { background: #1177bb; }
+        textarea { width: 100%; height: 120px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; }
+        .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
+        .stats span { color: #4ec9b0; font-weight: bold; }
+        #viewer-container { flex: 1; position: relative; }
+        #canvas3d { width: 100%; height: 100%; display: block; }
+        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="panel-section">
+        <h2>G-Code File</h2>
+        <label class="btn" for="file-input">Load .nc / .gcode file</label>
+        <input type="file" id="file-input" accept=".nc,.gcode,.tap,.txt">
+    </div>
+
+    <div class="panel-section">
+        <h2>Quick Paste</h2>
+        <textarea id="gcode-text" placeholder="Paste G-code here..."></textarea>
+        <button class="btn" id="parse-text-btn" style="margin-top: 8px; background: #333;">Visualize Code</button>
+    </div>
+
+    <div class="panel-section stats">
+        <h2>Path Statistics</h2>
+        Trajectory points: <span id="stat-points">0</span><br>
+        Rotations count (Q1): <span id="stat-rotations">0</span><br>
+        Min / Max X: <span id="stat-x">0 / 0</span><br>
+        Min / Max Y: <span id="stat-y">0 / 0</span><br>
+        Z Depth (min/max): <span id="stat-z">0 / 0</span>
+    </div>
+</div>
+
+<div id="viewer-container">
+    <canvas id="canvas3d"></canvas>
+    <div id="overlay">
+        <div class="legend-item"><div class="legend-color" style="background:#00ff00"></div> Cutting moves (G1/G2/G3)</div>
+        <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
+        <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
+    </div>
+</div>
+
+<script>
+    const container = document.getElementById('viewer-container');
+    const canvas = document.getElementById('canvas3d');
+    
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x1e1e1e);
+
+    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
+    camera.position.set(100, -200, 200);
+    camera.up.set(0, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+
+    const controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+
+    const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
+    gridHelper.rotation.x = Math.PI / 2;
+    scene.add(gridHelper);
+
+    let pathGroup = new THREE.Group();
+    scene.add(pathGroup);
+
+    window.addEventListener('resize', () => {
+        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(container.clientWidth, container.clientHeight);
+    });
+
+    function parseGCode(gcode) {
+        while(pathGroup.children.length > 0){ 
+            pathGroup.remove(pathGroup.children[0]); 
+        }
+
+        const lines = gcode.split('\n');
+        
+        let curX = 0, curY = 0, curZ = 0, curQ = 0;
+        let motionMode = 'G01'; // G00, G01, G02, G03
+        let pointsCount = 0;
+        let rotations = 0;
+
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        let minZ = Infinity, maxZ = -Infinity;
+
+        const cutMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
+        const rapidMaterial = new THREE.LineBasicMaterial({ color: 0xffaa00 });
+
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim().toUpperCase();
+            if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
+
+            if (line.includes('G00') || line.includes('G0')) motionMode = 'G00';
+            if (line.includes('G01') || line.includes('G1')) motionMode = 'G01';
+            if (line.includes('G02') || line.includes('G2')) motionMode = 'G02';
+            if (line.includes('G03') || line.includes('G3')) motionMode = 'G03';
+
+            let prevX = curX, prevY = curY, prevZ = curZ;
+
+            const xMatch = line.match(/X([-+]?[0-9]*\.?[0-9]+)/);
+            const yMatch = line.match(/Y([-+]?[0-9]*\.?[0-9]+)/);
+            const zMatch = line.match(/Z([-+]?[0-9]*\.?[0-9]+)/);
+            const qMatch = line.match(/Q1=([-+]?[0-9]*\.?[0-9]+)/);
+            const iMatch = line.match(/I([-+]?[0-9]*\.?[0-9]+)/);
+            const jMatch = line.match(/J([-+]?[0-9]*\.?[0-9]+)/);
+
+            if (xMatch) curX = parseFloat(xMatch[1]);
+            if (yMatch) curY = parseFloat(yMatch[1]);
+            if (zMatch) curZ = parseFloat(zMatch[1]);
+            
+            if (qMatch) {
+                curQ = parseFloat(qMatch[1]);
+                rotations++;
+                
+                const arrowLength = 6;
+                const rad = (curQ + 90) * (Math.PI / 180);
+                const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
+                const origin = new THREE.Vector3(curX, curY, curZ);
+                const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
+                pathGroup.add(arrowHelper);
+            }
+
+            minX = Math.min(minX, curX); maxX = Math.max(maxX, curX);
+            minY = Math.min(minY, curY); maxY = Math.max(maxY, curY);
+            minZ = Math.min(minZ, curZ); maxZ = Math.max(maxZ, curZ);
+
+            const isCutting = curZ <= 10;
+            const mat = isCutting ? cutMaterial : rapidMaterial;
+
+            if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
+                if (motionMode === 'G02' || motionMode === 'G03') {
+                    // G02 / G03 Arc interpolation
+                    const I = iMatch ? parseFloat(iMatch[1]) : 0;
+                    const J = jMatch ? parseFloat(jMatch[1]) : 0;
+
+                    const centerX = prevX + I;
+                    const centerY = prevY + J;
+
+                    const startAngle = Math.atan2(prevY - centerY, prevX - centerX);
+                    let endAngle = Math.atan2(curY - centerY, curX - centerX);
+
+                    const isClockwise = (motionMode === 'G02');
+
+                    if (isClockwise && endAngle >= startAngle) endAngle -= 2 * Math.PI;
+                    if (!isClockwise && endAngle <= startAngle) endAngle += 2 * Math.PI;
+
+                    const arcPoints = [];
+                    const segments = 20;
+                    for (let s = 0; s <= segments; s++) {
+                        const alpha = s / segments;
+                        const angle = startAngle + alpha * (endAngle - startAngle);
+                        const px = centerX + Math.cos(angle) * Math.hypot(I, J);
+                        const py = centerY + Math.sin(angle) * Math.hypot(I, J);
+                        const pz = prevZ + alpha * (curZ - prevZ);
+                        arcPoints.push(new THREE.Vector3(px, py, pz));
+                    }
+
+                    const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
+                    const lineMesh = new THREE.Line(geometry, mat);
+                    pathGroup.add(lineMesh);
+                } else {
+                    // Pure linear G00 / G01 moves
+                    const geometry = new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(prevX, prevY, prevZ),
+                        new THREE.Vector3(curX, curY, curZ)
+                    ]);
+                    const lineMesh = new THREE.Line(geometry, mat);
+                    pathGroup.add(lineMesh);
+                }
+                pointsCount++;
+            }
+        }
+
+        if (minX !== Infinity) {
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            controls.target.set(centerX, centerY, 0);
+            
+            document.getElementById('stat-points').innerText = pointsCount;
+            document.getElementById('stat-rotations').innerText = rotations;
+            document.getElementById('stat-x').innerText = `${minX.toFixed(1)} / ${maxX.toFixed(1)}`;
+            document.getElementById('stat-y').innerText = `${minY.toFixed(1)} / ${maxY.toFixed(1)}`;
+            document.getElementById('stat-z').innerText = `${minZ.toFixed(1)} / ${maxZ.toFixed(1)}`;
+        }
+    }
+
+    document.getElementById('file-input').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            document.getElementById('gcode-text').value = evt.target.result;
+            parseGCode(evt.target.result);
+        };
+        reader.readAsText(file);
+    });
+
+    document.getElementById('parse-text-btn').addEventListener('click', () => {
+        const text = document.getElementById('gcode-text').value;
+        parseGCode(text);
+    });
+
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+</html>
