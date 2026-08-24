@@ -25,6 +25,20 @@
         .feed-color-badge { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid #555; }
 
         textarea { width: 100%; height: 140px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; white-space: pre; }
+        
+        .selected-line-box {
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #4ec9b0;
+            word-break: break-all;
+            min-height: 38px;
+            margin-bottom: 8px;
+        }
+
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
         .stats span { color: #4ec9b0; font-weight: bold; }
         #viewer-container { flex: 1; position: relative; }
@@ -67,7 +81,6 @@
         <h2>Display Options</h2>
         <div id="feedrate-checkboxes" style="margin-bottom: 8px;">
             <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>
-            <!-- Dynamicznie generowane checkboxy dla wartości F -->
         </div>
         <hr style="border: 0; border-top: 1px solid #333; margin: 8px 0;">
         <label class="checkbox-container">
@@ -77,11 +90,18 @@
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
         </label>
         <label class="checkbox-container">
-            <input type="checkbox" id="toggle-z-labels" checked> Show Z Lift Line Numbers (N)
+            <input type="checkbox" id="toggle-z-labels"> Show Z Lift Line Numbers (N)
         </label>
         <label class="checkbox-container">
-            <input type="checkbox" id="toggle-q-labels" checked> Show Knife Angle Line Numbers (N)
+            <input type="checkbox" id="toggle-q-labels"> Show Knife Angle Line Numbers (N)
         </label>
+    </div>
+
+    <div class="panel-section">
+        <h2>Selected Line</h2>
+        <div style="font-size: 11px; color: #888; margin-bottom: 4px;">Line <span id="selected-line-num" style="color: #fff; font-weight: bold;">-</span>:</div>
+        <div class="selected-line-box" id="selected-line-text">Click path in 3D...</div>
+        <button class="btn btn-secondary" id="copy-line-btn">Copy Line</button>
     </div>
 
     <div class="panel-section">
@@ -165,7 +185,6 @@
     gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
-    // Grupa podrzędna dla wszystkich warstw posuwu (F)
     let feedGroupsMap = new Map(); 
 
     let airGroup = new THREE.Group();
@@ -173,13 +192,26 @@
     let zLabelsGroup = new THREE.Group();
     let qLabelsGroup = new THREE.Group();
 
+    // Domyślne wyłączenie etykiet Z oraz Q
+    zLabelsGroup.visible = false;
+    qLabelsGroup.visible = false;
+
     scene.add(airGroup);
     scene.add(qArrowsGroup);
     scene.add(zLabelsGroup);
     scene.add(qLabelsGroup);
 
     const raycaster = new THREE.Raycaster();
+    raycaster.params.Line.threshold = 1.5;
+
     const mouse = new THREE.Vector2();
+    let selectedGCodeText = "";
+
+    // Zmienne obsługi efektu HOVER
+    let hoveredObject = null;
+    let originalMaterial = null;
+    let originalScale = null;
+    const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
 
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
@@ -261,23 +293,17 @@
         return sprite;
     }
 
-    function highlightGCodeLine(lineIndex) {
+    function displaySelectedLine(lineIndex) {
         const text = textarea.value;
         const lines = text.split('\n');
 
         if (lineIndex < 0 || lineIndex >= lines.length) return;
 
-        let startPos = 0;
-        for (let i = 0; i < lineIndex; i++) {
-            startPos += lines[i].length + 1;
-        }
-        const endPos = startPos + lines[lineIndex].length;
+        const lineContent = lines[lineIndex].trim();
+        selectedGCodeText = lineContent;
 
-        textarea.focus();
-        textarea.setSelectionRange(startPos, endPos);
-
-        const lineHeight = 14; 
-        textarea.scrollTop = lineIndex * lineHeight - (textarea.clientHeight / 2);
+        document.getElementById('selected-line-num').innerText = lineIndex + 1;
+        document.getElementById('selected-line-text').innerText = lineContent || '(Empty line)';
     }
 
     function getColorForFeedrate(f, minF, maxF) {
@@ -293,25 +319,104 @@
         return new THREE.Color(r, g, b);
     }
 
+    function getClickableObjects() {
+        let clickable = [];
+        feedGroupsMap.forEach((grp) => {
+            if (grp.visible) clickable.push(...grp.children);
+        });
+        if (airGroup.visible) clickable.push(...airGroup.children);
+        if (qArrowsGroup.visible) clickable.push(...qArrowsGroup.children);
+        if (zLabelsGroup.visible) clickable.push(...zLabelsGroup.children);
+        if (qLabelsGroup.visible) clickable.push(...qLabelsGroup.children);
+        return clickable;
+    }
+
+    // Obsługa HOVER
+    canvas.addEventListener('mousemove', (event) => {
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(getClickableObjects(), true);
+
+        if (intersects.length > 0) {
+            let targetObj = intersects[0].object;
+            
+            while (targetObj && (targetObj.userData.lineIndex === undefined) && targetObj.parent) {
+                targetObj = targetObj.parent;
+            }
+
+            if (hoveredObject !== targetObj) {
+                resetHoveredObject();
+
+                if (targetObj && targetObj.userData && targetObj.userData.lineIndex !== undefined) {
+                    hoveredObject = targetObj;
+                    canvas.style.cursor = 'pointer';
+
+                    if (hoveredObject.isLine) {
+                        originalMaterial = hoveredObject.material;
+                        hoveredObject.material = highlightMaterial;
+                    } else if (hoveredObject.isSprite) {
+                        originalScale = hoveredObject.scale.clone();
+                        hoveredObject.scale.multiplyScalar(1.2);
+                    }
+                }
+            }
+        } else {
+            resetHoveredObject();
+        }
+    });
+
+    function resetHoveredObject() {
+        if (hoveredObject) {
+            if (hoveredObject.isLine && originalMaterial) {
+                hoveredObject.material = originalMaterial;
+            } else if (hoveredObject.isSprite && originalScale) {
+                hoveredObject.scale.copy(originalScale);
+            }
+            hoveredObject = null;
+            originalMaterial = null;
+            originalScale = null;
+            canvas.style.cursor = 'default';
+        }
+    }
+
+    // Obsługa KLIKNIĘCIA
     canvas.addEventListener('click', (event) => {
         const rect = canvas.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
         mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
 
         raycaster.setFromCamera(mouse, camera);
-        
-        let clickableObjects = [];
-        if (zLabelsGroup.visible) clickableObjects.push(...zLabelsGroup.children);
-        if (qLabelsGroup.visible) clickableObjects.push(...qLabelsGroup.children);
-
-        const intersects = raycaster.intersectObjects(clickableObjects);
+        const intersects = raycaster.intersectObjects(getClickableObjects(), true);
 
         if (intersects.length > 0) {
-            const clickedSprite = intersects[0].object;
-            if (clickedSprite.userData && clickedSprite.userData.lineIndex !== undefined) {
-                highlightGCodeLine(clickedSprite.userData.lineIndex);
+            let clickedObject = intersects[0].object;
+            
+            while (clickedObject && (clickedObject.userData.lineIndex === undefined) && clickedObject.parent) {
+                clickedObject = clickedObject.parent;
+            }
+
+            if (clickedObject && clickedObject.userData && clickedObject.userData.lineIndex !== undefined) {
+                displaySelectedLine(clickedObject.userData.lineIndex);
             }
         }
+    });
+
+    document.getElementById('copy-line-btn').addEventListener('click', () => {
+        if (!selectedGCodeText) return;
+        
+        navigator.clipboard.writeText(selectedGCodeText).then(() => {
+            const btn = document.getElementById('copy-line-btn');
+            const originalText = btn.innerText;
+            btn.innerText = "Copied!";
+            btn.style.background = "#2d8a4e";
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.style.background = "#333";
+            }, 1200);
+        });
     });
 
     window.addEventListener('resize', () => {
@@ -327,7 +432,7 @@
     }
 
     function parseGCode(gcode) {
-        // Czyszczenie dotychczasowych grup F z widoku (Scene)
+        resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp));
         feedGroupsMap.clear();
 
@@ -335,6 +440,10 @@
         clearGroup(qArrowsGroup);
         clearGroup(zLabelsGroup);
         clearGroup(qLabelsGroup);
+
+        document.getElementById('selected-line-num').innerText = '-';
+        document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
+        selectedGCodeText = "";
 
         const lines = gcode.split('\n');
 
@@ -357,7 +466,6 @@
         }
         if (minF === Infinity) { minF = 0; maxF = 1000; detectedFeedrates.add(1000); }
 
-        // Tworzenie grup i interfejsu (checkboxów) dla wartości F
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '<div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>';
 
@@ -437,6 +545,7 @@
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
                 const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
+                arrowHelper.userData = { lineIndex: i };
                 qArrowsGroup.add(arrowHelper);
 
                 const qSprite = createTextSprite(lineLabel, i, 'rgba(255, 0, 85, 0.9)');
@@ -471,6 +580,8 @@
                     zLabelsGroup.add(sprite);
                 }
 
+                let lineMesh;
+
                 if (motionMode === 'G02' || motionMode === 'G03') {
                     const I = iMatch ? parseFloat(iMatch[1]) : 0;
                     const J = jMatch ? parseFloat(jMatch[1]) : 0;
@@ -498,16 +609,18 @@
                     }
 
                     const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                    const lineMesh = new THREE.Line(geometry, mat);
-                    targetGroup.add(lineMesh);
+                    lineMesh = new THREE.Line(geometry, mat);
                 } else {
                     const geometry = new THREE.BufferGeometry().setFromPoints([
                         new THREE.Vector3(prevX, prevY, prevZ),
                         new THREE.Vector3(curX, curY, curZ)
                     ]);
-                    const lineMesh = new THREE.Line(geometry, mat);
-                    targetGroup.add(lineMesh);
+                    lineMesh = new THREE.Line(geometry, mat);
                 }
+
+                lineMesh.userData = { lineIndex: i };
+                targetGroup.add(lineMesh);
+
                 pointsCount++;
             }
         }
