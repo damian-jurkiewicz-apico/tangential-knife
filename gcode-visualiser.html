@@ -22,6 +22,7 @@
 
         .checkbox-container { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; user-select: none; color: #ccc; margin-bottom: 6px; }
         .checkbox-container input { cursor: pointer; }
+        .feed-color-badge { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid #555; }
 
         textarea { width: 100%; height: 140px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; white-space: pre; }
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
@@ -29,9 +30,11 @@
         #viewer-container { flex: 1; position: relative; }
         #canvas3d { width: 100%; height: 100%; display: block; }
         
-        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; }
-        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.75); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; }
+        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+        .gradient-bar { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #ffffff, #00ff66, #004d1a); border: 1px solid #555; }
+        .gradient-labels { display: flex; justify-content: space-between; width: 120px; font-size: 10px; color: #aaa; margin-top: 2px; }
 
         #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.75); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 5; }
         .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
@@ -62,6 +65,17 @@
 
     <div class="panel-section">
         <h2>Display Options</h2>
+        <div id="feedrate-checkboxes" style="margin-bottom: 8px;">
+            <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>
+            <!-- Dynamicznie generowane checkboxy dla wartości F -->
+        </div>
+        <hr style="border: 0; border-top: 1px solid #333; margin: 8px 0;">
+        <label class="checkbox-container">
+            <input type="checkbox" id="toggle-air-moves" checked> Show Air Moves (Z > 10)
+        </label>
+        <label class="checkbox-container">
+            <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
+        </label>
         <label class="checkbox-container">
             <input type="checkbox" id="toggle-z-labels" checked> Show Z Lift Line Numbers (N)
         </label>
@@ -80,6 +94,7 @@
         <h2>Path Statistics</h2>
         Trajectory points: <span id="stat-points">0</span><br>
         Rotations count (Q1): <span id="stat-rotations">0</span><br>
+        Min / Max Feedrate (F): <span id="stat-f">0 / 0</span><br>
         Min / Max X: <span id="stat-x">0 / 0</span><br>
         Min / Max Y: <span id="stat-y">0 / 0</span><br>
         Z Depth (min/max): <span id="stat-z">0 / 0</span>
@@ -102,7 +117,14 @@
     </div>
 
     <div id="overlay">
-        <div class="legend-item"><div class="legend-color" style="background:#00ff00"></div> Cutting moves (G1/G2/G3)</div>
+        <div style="margin-bottom: 6px; font-weight: bold;">Speed (Feedrate F):</div>
+        <div style="margin-bottom: 8px;">
+            <div class="gradient-bar"></div>
+            <div class="gradient-labels">
+                <span>Slow (White)</span>
+                <span>Fast (Dark Green)</span>
+            </div>
+        </div>
         <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
         <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
     </div>
@@ -128,15 +150,11 @@
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     
-    // CAŁKOWITE ZABLOKOWANIE OBROTU MYSZĄ:
     controls.enableRotate = false;
-    
-    // Zapewnienie przesuwania (Pan) oraz Zoomu rolką:
     controls.enablePan = true;
     controls.enableZoom = true;
     controls.screenSpacePanning = true;
 
-    // Przeciąganie lewym przyciskiem myszy domyślnie przesuwa widok (Pan)
     controls.mouseButtons = {
         LEFT: THREE.MOUSE.PAN,
         MIDDLE: THREE.MOUSE.DOLLY,
@@ -147,10 +165,16 @@
     gridHelper.rotation.x = Math.PI / 2;
     scene.add(gridHelper);
 
-    let pathGroup = new THREE.Group();
+    // Grupa podrzędna dla wszystkich warstw posuwu (F)
+    let feedGroupsMap = new Map(); 
+
+    let airGroup = new THREE.Group();
+    let qArrowsGroup = new THREE.Group();
     let zLabelsGroup = new THREE.Group();
     let qLabelsGroup = new THREE.Group();
-    scene.add(pathGroup);
+
+    scene.add(airGroup);
+    scene.add(qArrowsGroup);
     scene.add(zLabelsGroup);
     scene.add(qLabelsGroup);
 
@@ -165,19 +189,16 @@
     }
     setInitialCamera();
 
-    // Obrót realizowany WYŁĄCZNIE z poziomu przycisków
     function rotateCamera(angleDegX, angleDegY) {
         const angleRadX = (angleDegX * Math.PI) / 180;
         const angleRadY = (angleDegY * Math.PI) / 180;
 
         const offset = camera.position.clone().sub(controls.target);
-        
         offset.applyAxisAngle(new THREE.Vector3(0, 0, 1), angleRadX);
         
         const right = new THREE.Vector3().crossVectors(camera.up, offset).normalize();
         const testOffset = offset.clone().applyAxisAngle(right, angleRadY);
         
-        // Zabezpieczenie przed przejściem pod podłogę
         if (testOffset.z >= 0.1) {
             offset.copy(testOffset);
         }
@@ -259,6 +280,19 @@
         textarea.scrollTop = lineIndex * lineHeight - (textarea.clientHeight / 2);
     }
 
+    function getColorForFeedrate(f, minF, maxF) {
+        if (minF === maxF) return new THREE.Color(0x00ff66);
+
+        let t = (f - minF) / (maxF - minF);
+        t = Math.max(0, Math.min(1, t));
+
+        const r = 1.0 - t * 1.0;
+        const g = 1.0 - t * 0.7;
+        const b = 1.0 - t * 0.9;
+
+        return new THREE.Color(r, g, b);
+    }
+
     canvas.addEventListener('click', (event) => {
         const rect = canvas.getBoundingClientRect();
         mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
@@ -286,14 +320,76 @@
         renderer.setSize(container.clientWidth, container.clientHeight);
     });
 
+    function clearGroup(group) {
+        while(group.children.length > 0) {
+            group.remove(group.children[0]);
+        }
+    }
+
     function parseGCode(gcode) {
-        while(pathGroup.children.length > 0){ pathGroup.remove(pathGroup.children[0]); }
-        while(zLabelsGroup.children.length > 0){ zLabelsGroup.remove(zLabelsGroup.children[0]); }
-        while(qLabelsGroup.children.length > 0){ qLabelsGroup.remove(qLabelsGroup.children[0]); }
+        // Czyszczenie dotychczasowych grup F z widoku (Scene)
+        feedGroupsMap.forEach((grp) => scene.remove(grp));
+        feedGroupsMap.clear();
+
+        clearGroup(airGroup);
+        clearGroup(qArrowsGroup);
+        clearGroup(zLabelsGroup);
+        clearGroup(qLabelsGroup);
 
         const lines = gcode.split('\n');
+
+        let minF = Infinity, maxF = -Infinity;
+        let tempF = 1000;
+        const detectedFeedrates = new Set();
         
-        let curX = 0, curY = 0, curZ = 0, curQ = 0;
+        for (let i = 0; i < lines.length; i++) {
+            let line = lines[i].trim().toUpperCase();
+            if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
+            
+            const fMatch = line.match(/F([-+]?[0-9]*\.?[0-9]+)/);
+            if (fMatch) tempF = parseFloat(fMatch[1]);
+
+            if (!line.includes('G00') && !line.includes('G0')) {
+                minF = Math.min(minF, tempF);
+                maxF = Math.max(maxF, tempF);
+                detectedFeedrates.add(tempF);
+            }
+        }
+        if (minF === Infinity) { minF = 0; maxF = 1000; detectedFeedrates.add(1000); }
+
+        // Tworzenie grup i interfejsu (checkboxów) dla wartości F
+        const feedContainer = document.getElementById('feedrate-checkboxes');
+        feedContainer.innerHTML = '<div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>';
+
+        const sortedFeeds = Array.from(detectedFeedrates).sort((a, b) => a - b);
+        
+        sortedFeeds.forEach((fVal) => {
+            const grp = new THREE.Group();
+            scene.add(grp);
+            feedGroupsMap.set(fVal, grp);
+
+            const c = getColorForFeedrate(fVal, minF, maxF);
+            const hexColor = '#' + c.getHexString();
+
+            const lbl = document.createElement('label');
+            lbl.className = 'checkbox-container';
+            lbl.innerHTML = `
+                <input type="checkbox" checked data-feed="${fVal}">
+                <span class="feed-color-badge" style="background:${hexColor}"></span>
+                F${fVal}
+            `;
+            
+            lbl.querySelector('input').addEventListener('change', (e) => {
+                const targetF = parseFloat(e.target.getAttribute('data-feed'));
+                if (feedGroupsMap.has(targetF)) {
+                    feedGroupsMap.get(targetF).visible = e.target.checked;
+                }
+            });
+
+            feedContainer.appendChild(lbl);
+        });
+
+        let curX = 0, curY = 0, curZ = 0, curQ = 0, curF = tempF;
         let motionMode = 'G01';
         let pointsCount = 0;
         let rotations = 0;
@@ -302,7 +398,6 @@
         let minY = Infinity, maxY = -Infinity;
         let minZ = Infinity, maxZ = -Infinity;
 
-        const cutMaterial = new THREE.LineBasicMaterial({ color: 0x00ff00 });
         const rapidMaterial = new THREE.LineBasicMaterial({ color: 0xffaa00 });
 
         for (let i = 0; i < lines.length; i++) {
@@ -324,12 +419,14 @@
             const yMatch = line.match(/Y([-+]?[0-9]*\.?[0-9]+)/);
             const zMatch = line.match(/Z([-+]?[0-9]*\.?[0-9]+)/);
             const qMatch = line.match(/Q1=([-+]?[0-9]*\.?[0-9]+)/);
+            const fMatch = line.match(/F([-+]?[0-9]*\.?[0-9]+)/);
             const iMatch = line.match(/I([-+]?[0-9]*\.?[0-9]+)/);
             const jMatch = line.match(/J([-+]?[0-9]*\.?[0-9]+)/);
 
             if (xMatch) curX = parseFloat(xMatch[1]);
             if (yMatch) curY = parseFloat(yMatch[1]);
             if (zMatch) curZ = parseFloat(zMatch[1]);
+            if (fMatch) curF = parseFloat(fMatch[1]);
             
             if (qMatch) {
                 curQ = parseFloat(qMatch[1]);
@@ -340,7 +437,7 @@
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
                 const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
-                pathGroup.add(arrowHelper);
+                qArrowsGroup.add(arrowHelper);
 
                 const qSprite = createTextSprite(lineLabel, i, 'rgba(255, 0, 85, 0.9)');
                 qSprite.position.set(curX + Math.cos(rad) * (arrowLength + 4), curY + Math.sin(rad) * (arrowLength + 4), curZ);
@@ -351,8 +448,19 @@
             minY = Math.min(minY, curY); maxY = Math.max(maxY, curY);
             minZ = Math.min(minZ, curZ); maxZ = Math.max(maxZ, curZ);
 
-            const isCutting = curZ <= 10;
-            const mat = isCutting ? cutMaterial : rapidMaterial;
+            const isCutting = curZ <= 10 && motionMode !== 'G00';
+            
+            let mat;
+            let targetGroup;
+
+            if (isCutting) {
+                const segColor = getColorForFeedrate(curF, minF, maxF);
+                mat = new THREE.LineBasicMaterial({ color: segColor });
+                targetGroup = feedGroupsMap.get(curF) || airGroup;
+            } else {
+                mat = rapidMaterial;
+                targetGroup = airGroup;
+            }
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
                 const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
@@ -391,14 +499,14 @@
 
                     const geometry = new THREE.BufferGeometry().setFromPoints(arcPoints);
                     const lineMesh = new THREE.Line(geometry, mat);
-                    pathGroup.add(lineMesh);
+                    targetGroup.add(lineMesh);
                 } else {
                     const geometry = new THREE.BufferGeometry().setFromPoints([
                         new THREE.Vector3(prevX, prevY, prevZ),
                         new THREE.Vector3(curX, curY, curZ)
                     ]);
                     const lineMesh = new THREE.Line(geometry, mat);
-                    pathGroup.add(lineMesh);
+                    targetGroup.add(lineMesh);
                 }
                 pointsCount++;
             }
@@ -420,11 +528,20 @@
             
             document.getElementById('stat-points').innerText = pointsCount;
             document.getElementById('stat-rotations').innerText = rotations;
+            document.getElementById('stat-f').innerText = `${minF.toFixed(0)} / ${maxF.toFixed(0)}`;
             document.getElementById('stat-x').innerText = `${minX.toFixed(1)} / ${maxX.toFixed(1)}`;
             document.getElementById('stat-y').innerText = `${minY.toFixed(1)} / ${maxY.toFixed(1)}`;
             document.getElementById('stat-z').innerText = `${minZ.toFixed(1)} / ${maxZ.toFixed(1)}`;
         }
     }
+
+    document.getElementById('toggle-air-moves').addEventListener('change', (e) => {
+        airGroup.visible = e.target.checked;
+    });
+
+    document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => {
+        qArrowsGroup.visible = e.target.checked;
+    });
 
     document.getElementById('toggle-z-labels').addEventListener('change', (e) => {
         zLabelsGroup.visible = e.target.checked;
