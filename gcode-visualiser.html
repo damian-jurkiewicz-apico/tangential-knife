@@ -41,19 +41,97 @@
 
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
         .stats span { color: #4ec9b0; font-weight: bold; }
-        #viewer-container { flex: 1; position: relative; }
+        
+        #viewer-container { flex: 1; position: relative; display: flex; flex-direction: column; }
+        #canvas-wrapper { flex: 1; position: relative; width: 100%; height: 100%; }
         #canvas3d { width: 100%; height: 100%; display: block; }
         
-        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.75); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; }
+        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; z-index: 10; }
         .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
         .gradient-bar { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #ffffff, #00ff66, #004d1a); border: 1px solid #555; }
         .gradient-labels { display: flex; justify-content: space-between; width: 120px; font-size: 10px; color: #aaa; margin-top: 2px; }
 
-        #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.75); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 5; }
+        #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 10; }
         .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
         .pad-btn:hover { background: #0e639c; }
         .pad-btn:active { background: #1177bb; }
+
+        /* Poprawione pozycjonowanie dolnego suwaka */
+        #slider-bar {
+            background: #252526;
+            border-top: 1px solid #333;
+            padding: 10px 20px;
+            z-index: 15;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            font-weight: bold;
+            color: #ddd;
+        }
+
+        .range-slider-container {
+            position: relative;
+            height: 24px;
+            display: flex;
+            align-items: center;
+        }
+
+        .slider-track {
+            position: absolute;
+            height: 6px;
+            width: 100%;
+            background: #444;
+            border-radius: 3px;
+        }
+
+        .slider-highlight {
+            position: absolute;
+            height: 6px;
+            background: #0e639c;
+            border-radius: 3px;
+        }
+
+        .range-slider-container input[type="range"] {
+            position: absolute;
+            width: 100%;
+            pointer-events: auto;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 0;
+            background: none;
+            outline: none;
+            margin: 0;
+        }
+
+        .range-slider-container input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4ec9b0;
+            cursor: pointer;
+            border: 2px solid #fff;
+            position: relative;
+            z-index: 20;
+        }
+
+        .range-slider-container input[type="range"]::-moz-range-thumb {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #4ec9b0;
+            cursor: pointer;
+            border: 2px solid #fff;
+            position: relative;
+            z-index: 20;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -122,49 +200,65 @@
 </div>
 
 <div id="viewer-container">
-    <canvas id="canvas3d"></canvas>
-    
-    <div id="rotation-pad">
-        <div></div>
-        <button class="pad-btn" onclick="rotateCamera(0, -15)" title="Rotate Up">▲</button>
-        <div></div>
-        <button class="pad-btn" onclick="rotateCamera(-15, 0)" title="Rotate Left">◄</button>
-        <button class="pad-btn" onclick="setView('home')" title="Reset View">⟲</button>
-        <button class="pad-btn" onclick="rotateCamera(15, 0)" title="Rotate Right">►</button>
-        <div></div>
-        <button class="pad-btn" onclick="rotateCamera(0, 15)" title="Rotate Down">▼</button>
-        <div></div>
+    <div id="canvas-wrapper">
+        <canvas id="canvas3d"></canvas>
+        
+        <div id="rotation-pad">
+            <div></div>
+            <button class="pad-btn" onclick="rotateCamera(0, -15)" title="Rotate Up">▲</button>
+            <div></div>
+            <button class="pad-btn" onclick="rotateCamera(-15, 0)" title="Rotate Left">◄</button>
+            <button class="pad-btn" onclick="setView('home')" title="Reset View">⟲</button>
+            <button class="pad-btn" onclick="rotateCamera(15, 0)" title="Rotate Right">►</button>
+            <div></div>
+            <button class="pad-btn" onclick="rotateCamera(0, 15)" title="Rotate Down">▼</button>
+            <div></div>
+        </div>
+
+        <div id="overlay">
+            <div style="margin-bottom: 6px; font-weight: bold;">Speed (Feedrate F):</div>
+            <div style="margin-bottom: 8px;">
+                <div class="gradient-bar"></div>
+                <div class="gradient-labels">
+                    <span>Slow (White)</span>
+                    <span>Fast (Dark Green)</span>
+                </div>
+            </div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
+        </div>
     </div>
 
-    <div id="overlay">
-        <div style="margin-bottom: 6px; font-weight: bold;">Speed (Feedrate F):</div>
-        <div style="margin-bottom: 8px;">
-            <div class="gradient-bar"></div>
-            <div class="gradient-labels">
-                <span>Slow (White)</span>
-                <span>Fast (Dark Green)</span>
-            </div>
+    <!-- Pasek suwaka umieszczony na dole pod oknem 3D -->
+    <div id="slider-bar">
+        <div class="slider-header">
+            <span>Range: Line <span id="slider-start-val" style="color: #4ec9b0;">0</span> to <span id="slider-end-val" style="color: #4ec9b0;">0</span></span>
+            <span style="color: #888;">Total Lines: <span id="slider-total-val">0</span></span>
         </div>
-        <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
-        <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
+        <div class="range-slider-container">
+            <div class="slider-track"></div>
+            <div class="slider-highlight" id="slider-highlight"></div>
+            <input type="range" id="range-start" min="0" max="100" value="0">
+            <input type="range" id="range-end" min="0" max="100" value="100">
+        </div>
     </div>
 </div>
 
 <script>
-    const container = document.getElementById('viewer-container');
+    const wrapper = document.getElementById('canvas-wrapper');
     const canvas = document.getElementById('canvas3d');
     const textarea = document.getElementById('gcode-text');
     
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e1e);
 
-    const camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 10000);
+    const camera = new THREE.PerspectiveCamera(45, wrapper.clientWidth / wrapper.clientHeight, 0.1, 10000);
     
     let currentTarget = new THREE.Vector3(0, 0, 0);
     let defaultDistance = 300;
 
     const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
 
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -192,7 +286,6 @@
     let zLabelsGroup = new THREE.Group();
     let qLabelsGroup = new THREE.Group();
 
-    // Domyślne wyłączenie etykiet Z oraz Q
     zLabelsGroup.visible = false;
     qLabelsGroup.visible = false;
 
@@ -207,11 +300,12 @@
     const mouse = new THREE.Vector2();
     let selectedGCodeText = "";
 
-    // Zmienne obsługi efektu HOVER
     let hoveredObject = null;
     let originalMaterial = null;
     let originalScale = null;
     const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
+
+    let totalGCodeLines = 0;
 
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
@@ -328,7 +422,8 @@
         if (qArrowsGroup.visible) clickable.push(...qArrowsGroup.children);
         if (zLabelsGroup.visible) clickable.push(...zLabelsGroup.children);
         if (qLabelsGroup.visible) clickable.push(...qLabelsGroup.children);
-        return clickable;
+
+        return clickable.filter(obj => obj.visible);
     }
 
     // Obsługa HOVER
@@ -419,10 +514,71 @@
         });
     });
 
+    // OBSŁUGA DUAL RANGE SLIDERA
+    const rangeStartInput = document.getElementById('range-start');
+    const rangeEndInput = document.getElementById('range-end');
+    const sliderHighlight = document.getElementById('slider-highlight');
+    const sliderStartVal = document.getElementById('slider-start-val');
+    const sliderEndVal = document.getElementById('slider-end-val');
+
+    function updateSliderUI() {
+        let minVal = parseInt(rangeStartInput.value);
+        let maxVal = parseInt(rangeEndInput.value);
+
+        if (minVal > maxVal) {
+            let tmp = minVal;
+            minVal = maxVal;
+            maxVal = tmp;
+        }
+
+        const total = totalGCodeLines > 0 ? totalGCodeLines : 1;
+        const leftPercent = (minVal / total) * 100;
+        const rightPercent = (maxVal / total) * 100;
+
+        sliderHighlight.style.left = leftPercent + '%';
+        sliderHighlight.style.width = (rightPercent - leftPercent) + '%';
+
+        sliderStartVal.innerText = minVal + 1;
+        sliderEndVal.innerText = maxVal + 1;
+
+        filterPathByLineRange(minVal, maxVal);
+    }
+
+    rangeStartInput.addEventListener('input', () => {
+        if (parseInt(rangeStartInput.value) > parseInt(rangeEndInput.value)) {
+            rangeStartInput.value = rangeEndInput.value;
+        }
+        updateSliderUI();
+    });
+
+    rangeEndInput.addEventListener('input', () => {
+        if (parseInt(rangeEndInput.value) < parseInt(rangeStartInput.value)) {
+            rangeEndInput.value = rangeStartInput.value;
+        }
+        updateSliderUI();
+    });
+
+    function filterPathByLineRange(minLine, maxLine) {
+        const processGroup = (group) => {
+            group.children.forEach(child => {
+                if (child.userData && child.userData.lineIndex !== undefined) {
+                    const idx = child.userData.lineIndex;
+                    child.visible = (idx >= minLine && idx <= maxLine);
+                }
+            });
+        };
+
+        feedGroupsMap.forEach(grp => processGroup(grp));
+        processGroup(airGroup);
+        processGroup(qArrowsGroup);
+        processGroup(zLabelsGroup);
+        processGroup(qLabelsGroup);
+    }
+
     window.addEventListener('resize', () => {
-        camera.aspect = container.clientWidth / container.clientHeight;
+        camera.aspect = wrapper.clientWidth / wrapper.clientHeight;
         camera.updateProjectionMatrix();
-        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
     });
 
     function clearGroup(group) {
@@ -446,6 +602,17 @@
         selectedGCodeText = "";
 
         const lines = gcode.split('\n');
+        totalGCodeLines = lines.length;
+
+        rangeStartInput.min = 0;
+        rangeStartInput.max = totalGCodeLines - 1;
+        rangeStartInput.value = 0;
+
+        rangeEndInput.min = 0;
+        rangeEndInput.max = totalGCodeLines - 1;
+        rangeEndInput.value = totalGCodeLines - 1;
+
+        document.getElementById('slider-total-val').innerText = totalGCodeLines;
 
         let minF = Infinity, maxF = -Infinity;
         let tempF = 1000;
@@ -624,6 +791,8 @@
                 pointsCount++;
             }
         }
+
+        updateSliderUI();
 
         if (minX !== Infinity) {
             const centerX = (minX + maxX) / 2;
