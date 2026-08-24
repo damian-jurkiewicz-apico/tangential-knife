@@ -36,6 +36,13 @@ properties = {
       value: 0.5
   },
 
+plungeFeedrate: {
+      title: "Plunge Feedrate",
+      description: "Default speed for vertical (Z) plunge moves. Set to 0 to use Tool Plunge Feedrate from Fusion 360.",
+      type: "number",
+      value: 400
+  },  
+
 rotationFeedrate: {
       title: "Rotation Feedrate (Q1)",
       description: "Speed for C/Q axis rotations in air.",
@@ -246,8 +253,11 @@ function moveDown() {
   var z = zOutput.format(plungePos.z); 
   if (z) {
     gMotionModal.reset();
-    // Pobiera prędkość z opcji "Plunge Feedrate" w Fusion
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+
+  var pFeed = getProperty("plungeFeedrate");
+  if (!pFeed || pFeed <= 0) {
+    pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+  }
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
   }
 }
@@ -261,10 +271,13 @@ function writeBlock() {
   blockStr = blockStr.replace("G00", "G01");
 
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
-    var pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    var pFeed = getProperty("plungeFeedrate");
+    if (!pFeed || pFeed <= 0) {
+      pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    }
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(pFeed);
-  } 
+  }
   else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
     var cFeed = (tool.feedrate > 0) ? tool.feedrate : 1500;
     blockStr += " F" + feedFormat.format(cFeed);
