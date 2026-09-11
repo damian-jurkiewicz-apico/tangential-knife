@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vergano</title>
+	<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            display: flex;
+            flex-direction: column;
+            margin: 0;
+            padding: 40px;
+            background-color: #f0f4f8;
+            color: #2b343b; /* Vergano Dark Gray */
+            min-height: 100vh;
+            box-sizing: border-box;
+            align-items: center;
+        }
+        .main-app {
+            display: flex;
+            flex-direction: column;
+            gap: 30px;
+            width: 100%;
+            max-width: 1200px;
+        }
+        .top-row {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            justify-content: center;
+            width: 100%;
+            flex-wrap: nowrap;
+        }
+        @media (max-width: 1100px) {
+            .top-row { flex-wrap: wrap; }
+        }
+        .bottom-row {
+            width: 100%;
+        }
+        .controls {
+            width: 360px;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+        .tabs { display: flex; background: #eef1f6; border-bottom: 1px solid #ddd; }
+        .tab {
+            flex: 1; text-align: center; padding: 15px 0; font-size: 11px; font-weight: 700;
+            cursor: pointer; text-transform: uppercase; color: #666; transition: 0.2s;
+        }
+        .tab.active { background: white; color: #005c91; border-bottom: 3px solid #005c91; } /* Vergano Dark Blue */
+        .tab-content { padding: 25px 30px; display: none; }
+        .tab-content.active { display: block; }
+        .global-settings { padding: 25px 30px; background: #fafafa; border-top: 1px solid #eee; }
+        
+        .preview-container { display: flex; flex-direction: column; gap: 15px; flex-shrink: 0; }
+        .preview-box {
+            background: white; border-radius: 16px; padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.08); display: flex;
+            flex-direction: column; align-items: center;
+            width: 300px; box-sizing: border-box;
+        }
+        .preview-box span { font-size: 14px; font-weight: 600; color: #888; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; }
+        #canvas3d { width: 260px; height: 260px; border-radius: 8px; background: #eef1f6; cursor: grab; }
+        #canvas3d:active { cursor: grabbing; }
+        svg { transition: all 0.2s ease; width: 260px; height: 260px; }
+        
+        label { display: block; margin-top: 15px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: #555; }
+        input[type=range] { width: 100%; margin-top: 8px; cursor: pointer; accent-color: #0082c8; } /* Vergano Light Blue */
+        .value-display { font-weight: 700; color: #0082c8; float: right; font-family: monospace; font-size: 14px; }
+        
+        .toggle-container { display: flex; align-items: center; gap: 12px; margin-top: 15px; cursor: pointer; }
+        .toggle-container input { width: 18px; height: 18px; cursor: pointer; accent-color: #0082c8; margin:0; }
+        .toggle-text { font-size: 12px; font-weight: 700; color: #2b343b; text-transform: uppercase; }
+        
+        .sub-slider-wrapper { display: none; padding-left: 30px; margin-bottom: 5px; }
+        .sub-slider-wrapper label { margin-top: 5px; font-size: 10px; color: #777; }
+        
+        .btn-group { display: flex; gap: 10px; margin-top: 25px; }
+        button { flex: 1; padding: 14px; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 600; transition: 0.2s;}
+        button:hover { opacity: 0.9; transform: translateY(-2px); }
+        .btn-svg { background: #005c91; }
+        .btn-dxf { background: #0082c8; }
+
+        .gallery-section {
+            width: 100%;
+            background: white; border-radius: 16px; padding: 30px; box-sizing: border-box;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.05);
+        }
+        .gallery-title { text-align: center; font-size: 20px; font-weight: 700; margin-top: 0; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1.5px; color: #2b343b;}
+        .gallery-grid {
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr); 
+            gap: 20px;
+        }
+        @media (max-width: 800px) {
+            .gallery-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        .preset-card {
+            border: 1px solid #eee; border-radius: 12px; padding: 15px; cursor: pointer;
+            transition: all 0.2s ease; background: #fff; text-align: center;
+        }
+        .preset-card:hover { transform: translateY(-5px); box-shadow: 0 8px 25px rgba(0, 92, 145, 0.15); border-color: #005c91;}
+        .preset-placeholder {
+            height: 110px; background: #f0f4f8; border-radius: 8px; margin-bottom: 15px;
+            display: flex; align-items: center; justify-content: center;
+            background-image: radial-gradient(#d0d7de 1px, transparent 1px); background-size: 10px 10px;
+            overflow: hidden; padding: 10px; box-sizing: border-box;
+        }
+        .preset-placeholder svg { width: 100%; height: 100%; transition: transform 0.3s ease; }
+        .preset-card:hover .preset-placeholder svg { transform: scale(1.08); }
+        .preset-name { font-weight: 700; font-size: 14px; color: #2b343b; text-transform: uppercase; }
+        .preset-desc { font-size: 11px; color: #666; margin-top: 5px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+
+    <div class="main-app">
+        
+        <!-- LIGNE 1 : APERÇUS ET CONTRÔLES -->
+        <div class="top-row">
+            <div class="preview-container">
+                <div class="preview-box">
+                    <span>Aperçu 2D</span>
+                    <svg id="canvas" viewBox="-150 -150 300 300" xmlns="http://www.w3.org/2000/svg">
+                        <path id="shape" fill="#005c91" />
+                    </svg>
+                </div>
+            </div>
+
+            <div class="preview-container">
+                <div class="preview-box">
+                    <span>Aperçu 3D</span>
+                    <div id="canvas3d"></div>
+                </div>
+            </div>
+
+            <div class="controls">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchTab('poly')">Polygones</div>
+                    <div class="tab" onclick="switchTab('rect')">Parallélogrammes</div>
+                    <div class="tab" onclick="switchTab('ellipse')">Ellipses</div>
+                </div>
+
+                <!-- ONGLET 1 : POLYGONES -->
+                <div id="tab-poly" class="tab-content active">
+                    <label>Diamètre [mm] <span class="value-display" id="val-dia">100</span>
+                        <input type="range" id="dia" min="10" max="500" value="100">
+                    </label>
+                    <label>Nombre de côtés <span class="value-display" id="val-points">6</span>
+                        <input type="range" id="points" min="3" max="20" value="6">
+                    </label>
+                    <label>Rayon interne <span class="value-display" id="val-inner">100%</span>
+                        <input type="range" id="inner" min="10" max="100" value="100">
+                    </label>
+                    <label>Rayon de courbure <span class="value-display" id="val-corner">16</span>
+                        <input type="range" id="corner" min="0" max="100" value="16">
+                    </label>
+                    <label class="toggle-container">
+                        <input type="checkbox" id="polyStretchToggle">
+                        <span class="toggle-text">Section interne</span>
+                    </label>
+                    <div id="polyStretchWrapper" style="display: none;">
+                        <label>Longueur de la section [mm] <span class="value-display" id="val-polyStretch">50</span>
+                            <input type="range" id="polyStretch" min="1" max="300" value="50">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ONGLET 2 : PARALLÉLOGRAMMES -->
+                <div id="tab-rect" class="tab-content">
+                    <label>Largeur [mm] <span class="value-display" id="val-rectW">150</span>
+                        <input type="range" id="rectW" min="10" max="500" value="150">
+                    </label>
+                    <label>Hauteur [mm] <span class="value-display" id="val-rectH">100</span>
+                        <input type="range" id="rectH" min="10" max="500" value="100">
+                    </label>
+                    <label>Inclinaison [°] <span class="value-display" id="val-rectSkew">20</span>
+                        <input type="range" id="rectSkew" min="0" max="45" value="20">
+                    </label>
+                    <label>Rayon de courbure par défaut <span class="value-display" id="val-rectCorner">10</span>
+                        <input type="range" id="rectCorner" min="0" max="100" value="10">
+                    </label>
+                    
+                    <div style="font-size: 10px; font-weight: bold; color: #888; margin-top: 25px; text-transform: uppercase;">Modifier les angles individuellement :</div>
+                    
+                    <label class="toggle-container">
+                        <input type="checkbox" id="rectC1Toggle">
+                        <span class="toggle-text">1 (Haut Droite)</span>
+                    </label>
+                    <div id="rectC1Wrapper" class="sub-slider-wrapper">
+                        <label>Rayon angle 1 <span class="value-display" id="val-rectC1">0</span>
+                            <input type="range" id="rectC1" min="0" max="100" value="0">
+                        </label>
+                    </div>
+
+                    <label class="toggle-container">
+                        <input type="checkbox" id="rectC2Toggle">
+                        <span class="toggle-text">2 (Bas Droite)</span>
+                    </label>
+                    <div id="rectC2Wrapper" class="sub-slider-wrapper">
+                        <label>Rayon angle 2 <span class="value-display" id="val-rectC2">0</span>
+                            <input type="range" id="rectC2" min="0" max="100" value="0">
+                        </label>
+                    </div>
+
+                    <label class="toggle-container">
+                        <input type="checkbox" id="rectC3Toggle">
+                        <span class="toggle-text">3 (Bas Gauche)</span>
+                    </label>
+                    <div id="rectC3Wrapper" class="sub-slider-wrapper">
+                        <label>Rayon angle 3 <span class="value-display" id="val-rectC3">0</span>
+                            <input type="range" id="rectC3" min="0" max="100" value="0">
+                        </label>
+                    </div>
+
+                    <label class="toggle-container">
+                        <input type="checkbox" id="rectC4Toggle">
+                        <span class="toggle-text">4 (Haut Gauche)</span>
+                    </label>
+                    <div id="rectC4Wrapper" class="sub-slider-wrapper">
+                        <label>Rayon angle 4 <span class="value-display" id="val-rectC4">0</span>
+                            <input type="range" id="rectC4" min="0" max="100" value="0">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- ONGLET 3 : ELLIPSES -->
+                <div id="tab-ellipse" class="tab-content">
+                    <label>Diamètre [mm] <span class="value-display" id="val-ellA">150</span>
+                        <input type="range" id="ellA" min="10" max="500" value="150">
+                    </label>
+                    
+                    <label class="toggle-container" style="margin-top: 25px;">
+                        <input type="checkbox" id="ellModeToggle">
+                        <span class="toggle-text">Mode Ellipse (axes différents)</span>
+                    </label>
+                    <div id="ellBWrapper" style="display: none; padding-left: 20px; border-left: 2px solid #eee; margin-left: 9px; margin-top: 10px;">
+                        <label style="margin-top:0;">Diamètre Y [mm] <span class="value-display" id="val-ellB">100</span>
+                            <input type="range" id="ellB" min="10" max="500" value="100">
+                        </label>
+                    </div>
+
+                    <label class="toggle-container" style="margin-top: 25px;">
+                        <input type="checkbox" id="ellStretchToggle">
+                        <span class="toggle-text">Section interne (Pilule)</span>
+                    </label>
+                    <div id="ellStretchWrapper" style="display: none; padding-left: 20px; border-left: 2px solid #eee; margin-left: 9px; margin-top: 10px;">
+                        <label style="margin-top:0;">Longueur de la section [mm] <span class="value-display" id="val-ellStretch">50</span>
+                            <input type="range" id="ellStretch" min="1" max="300" value="50">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- PARAMÈTRES GLOBAUX -->
+                <div class="global-settings">
+                    <label class="toggle-container">
+                        <input type="checkbox" id="pixelToggle">
+                        <span class="toggle-text">Mode Pixélisé</span>
+                    </label>
+                    <div id="pixelWrapper" style="display: none;">
+                        <label>Taille de pixel [mm] <span class="value-display" id="val-pixel">8</span>
+                            <input type="range" id="pixelSize" min="2" max="40" value="8">
+                        </label>
+                    </div>
+                    
+                    <label>Profondeur d'extrusion 3D [mm] <span class="value-display" id="val-thick">18</span>
+                        <input type="range" id="thick" min="1" max="100" value="18">
+                    </label>
+
+                    <div class="btn-group">
+                        <button class="btn-svg" onclick="downloadSVG()">Télécharger SVG</button>
+                        <button class="btn-dxf" onclick="downloadDXF()">Télécharger DXF</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LIGNE 2 : GALERIE -->
+        <div class="bottom-row">
+            <div class="gallery-section">
+                <h3 class="gallery-title">Formes Classiques</h3>
+                <div class="gallery-grid" id="presets-container"></div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script>
+        let currentTab = 'poly';
+        let currentDxfLines = []; 
+        let rawShapePoints = [];
+        let boundsLimit = 0;
+
+        const recipes = {
+            poly: [
+                { name: "Coquille", desc: "Côtés: 10, Interne: 90%", params: { dia: 200, points: 10, inner: 90, corner: 40, polyStretchToggle: false, polyStretch: 50, pixelToggle: false } },
+                { name: "Stella", desc: "Côtés: 4, Interne: 50%", params: { dia: 200, points: 4, inner: 50, corner: 40, polyStretchToggle: false, polyStretch: 50, pixelToggle: false } },
+                { name: "Étoile", desc: "Côtés: 5, Interne: 70%", params: { dia: 200, points: 5, inner: 70, corner: 100, polyStretchToggle: false, polyStretch: 50, pixelToggle: false } },
+                { name: "Écusson", desc: "Côtés: 6, Étiré", params: { dia: 160, points: 20, inner: 98, corner: 100, polyStretchToggle: true, polyStretch: 60, pixelToggle: false } },
+                { name: "Soleil", desc: "Côtés: 12, Interne: 85%", params: { dia: 200, points: 12, inner: 85, corner: 10, polyStretchToggle: false, polyStretch: 50, pixelToggle: false } },
+                { name: "Croix", desc: "Côtés: 4, Angles vifs", params: { dia: 200, points: 4, inner: 40, corner: 5, polyStretchToggle: false, polyStretch: 50, pixelToggle: false } }
+            ],
+            rect: [
+                { name: "Carre Classique", desc: "Carré arrondi", params: { rectW: 150, rectH: 150, rectSkew: 0, rectCorner: 25, rectC1Toggle: false, rectC2Toggle: false, rectC3Toggle: false, rectC4Toggle: false, pixelToggle: false } },
+                { name: "Voile", desc: "Haut arrondi", params: { rectW: 200, rectH: 160, rectSkew: 0, rectCorner: 0, rectC1Toggle: false, rectC3Toggle: false, rectC2Toggle: true, rectC2: 150, rectC4Toggle: true, rectC4: 150, pixelToggle: false } },
+                { name: "Feuille", desc: "2 angles opposés arrondis", params: { rectW: 160, rectH: 160, rectSkew: 0, rectCorner: 0, rectC1Toggle: true, rectC1: 50, rectC3Toggle: true, rectC3: 50, rectC2Toggle: false, rectC4Toggle: false, pixelToggle: false } },
+                { name: "Capsule", desc: "Entièrement arrondi", params: { rectW: 250, rectH: 80, rectSkew: 0, rectCorner: 100, rectC1Toggle: false, rectC2Toggle: false, rectC3Toggle: false, rectC4Toggle: false, pixelToggle: false } },
+                { name: "Fanion", desc: "Incliné & doux", params: { rectW: 220, rectH: 100, rectSkew: 25, rectCorner: 20, rectC1Toggle: false, rectC2Toggle: false, rectC3Toggle: false, rectC4Toggle: false, pixelToggle: false } },
+                { name: "Goutte", desc: "Un angle vif en bas", params: { rectW: 150, rectH: 150, rectSkew: 0, rectCorner: 100, rectC2Toggle: true, rectC2: 0, rectC1Toggle: false, rectC3Toggle: false, rectC4Toggle: false, pixelToggle: false } }
+            ],
+            ellipse: [
+                { name: "Cercle Parfait", desc: "Cercle standard", params: { ellA: 200, ellModeToggle: false, ellStretchToggle: false, pixelToggle: false } },
+                { name: "Ovale Classique", desc: "Mode ellipse actif", params: { ellA: 240, ellB: 120, ellModeToggle: true, ellStretchToggle: false, pixelToggle: false } },
+                { name: "Pilule", desc: "Cercle étiré", params: { ellA: 100, ellModeToggle: false, ellStretchToggle: true, ellStretch: 150, pixelToggle: false } },
+                { name: "Ovale Circulaire", desc: "Ovale rafiné", params: { ellA: 100, ellModeToggle: false, ellStretchToggle: true, ellStretch: 40, pixelToggle: false } },
+                { name: "Haricot", desc: "Pilule aplatie", params: { ellA: 80, ellB: 140, ellModeToggle: true, ellStretchToggle: true, ellStretch: 120, pixelToggle: false } },
+				{ name: "Pixel", desc: "Cercle pixélisé", params: { ellA: 180, ellModeToggle: false, ellStretchToggle: false, pixelToggle: true, pixelSize: 15 } }
+            ]
+        };
+
+        const inputs = {
+            dia: document.getElementById('dia'), points: document.getElementById('points'), inner: document.getElementById('inner'), corner: document.getElementById('corner'),
+            polyStretchToggle: document.getElementById('polyStretchToggle'), polyStretch: document.getElementById('polyStretch'),
+            rectW: document.getElementById('rectW'), rectH: document.getElementById('rectH'), rectSkew: document.getElementById('rectSkew'), rectCorner: document.getElementById('rectCorner'),
+            rectC1Toggle: document.getElementById('rectC1Toggle'), rectC1: document.getElementById('rectC1'),
+            rectC2Toggle: document.getElementById('rectC2Toggle'), rectC2: document.getElementById('rectC2'),
+            rectC3Toggle: document.getElementById('rectC3Toggle'), rectC3: document.getElementById('rectC3'),
+            rectC4Toggle: document.getElementById('rectC4Toggle'), rectC4: document.getElementById('rectC4'),
+            ellA: document.getElementById('ellA'), ellB: document.getElementById('ellB'),
+            ellModeToggle: document.getElementById('ellModeToggle'), ellStretchToggle: document.getElementById('ellStretchToggle'), ellStretch: document.getElementById('ellStretch'),
+            thick: document.getElementById('thick'), pixelToggle: document.getElementById('pixelToggle'), pixelSize: document.getElementById('pixelSize')
+        };
+        
+        function switchTab(tabId) {
+            currentTab = tabId;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.tab[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+            renderGallery();
+            update();
+        }
+
+        function createPreviewSVG(tab, params) {
+            let raw = [];
+            let bounds = 100;
+            let cRad = 0;
+            
+            if (tab === 'poly') {
+                let dia = params.dia;
+                let pts = params.points;
+                let inRadius = (dia / 2) * ((params.inner * 0.95) / 100);
+                cRad = params.corner;
+                let stretch = params.polyStretchToggle ? params.polyStretch : 0;
+                bounds = dia + stretch;
+                let angleStep = Math.PI / pts;
+                for (let i = 0; i < 2 * pts; i++) {
+                    let r = (i % 2 === 0) ? dia / 2 : inRadius;
+                    let a = -Math.PI / 2 + i * angleStep;
+                    let x = Math.cos(a) * r; let y = Math.sin(a) * r;
+                    if (stretch > 0) {
+                        if (Math.abs(x) < 1e-5) {
+                            if (y < 0) { raw.push({x: x - stretch/2, y, r: cRad}, {x: x + stretch/2, y, r: cRad}); } 
+                            else { raw.push({x: x + stretch/2, y, r: cRad}, {x: x - stretch/2, y, r: cRad}); }
+                        } else if (x > 0) raw.push({x: x + stretch/2, y, r: cRad});
+                        else raw.push({x: x - stretch/2, y, r: cRad});
+                    } else raw.push({x, y, r: cRad});
+                }
+            } 
+            else if (tab === 'rect') {
+                let w = params.rectW;
+                let h = params.rectH;
+                let skewDeg = params.rectSkew;
+                let defCorner = params.rectCorner;
+                let r1 = params.rectC1Toggle ? params.rectC1 : defCorner;
+                let r2 = params.rectC2Toggle ? params.rectC2 : defCorner;
+                let r3 = params.rectC3Toggle ? params.rectC3 : defCorner;
+                let r4 = params.rectC4Toggle ? params.rectC4 : defCorner;
+                bounds = Math.max(w, h) * 1.5;
+                let skewOffset = (h / 2) * Math.tan(skewDeg * Math.PI / 180);
+                raw = [
+                    { x: w/2 + skewOffset, y: -h/2, r: r1 },
+                    { x: w/2 - skewOffset, y: h/2, r: r2 },
+                    { x: -w/2 - skewOffset, y: h/2, r: r3 },
+                    { x: -w/2 + skewOffset, y: -h/2, r: r4 }
+                ];
+            }
+            else if (tab === 'ellipse') {
+                let rx = params.ellA / 2;
+                let ry = params.ellModeToggle ? params.ellB / 2 : rx; 
+                let stretch = params.ellStretchToggle ? params.ellStretch : 0;
+                bounds = (Math.max(rx, ry) * 2) + stretch;
+                let segments = 64; 
+                if (stretch > 0) {
+                    for(let i=0; i<=segments/2; i++) {
+                        let a = -Math.PI/2 + (i / (segments/2)) * Math.PI;
+                        raw.push({ x: stretch/2 + rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                    for(let i=0; i<=segments/2; i++) {
+                        let a = Math.PI/2 + (i / (segments/2)) * Math.PI;
+                        raw.push({ x: -stretch/2 + rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                } else {
+                    for(let i=0; i<segments; i++) {
+                        let a = -Math.PI/2 + (i / segments) * 2 * Math.PI;
+                        raw.push({ x: rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                }
+            }
+
+            let path = "";
+            let len = raw.length;
+            for (let i = 0; i < len; i++) {
+                let p0 = raw[(i - 1 + len) % len];
+                let p1 = raw[i];
+                let p2 = raw[(i + 1) % len];
+                
+                let dx1 = p0.x - p1.x; let dy1 = p0.y - p1.y;
+                let dx2 = p2.x - p1.x; let dy2 = p2.y - p1.y;
+                let len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
+                if (len1 < 0.001 || len2 < 0.001) continue; 
+                
+                let a1 = Math.atan2(dy1, dx1), a2 = Math.atan2(dy2, dx2);
+                let angle = Math.abs(a1 - a2); if (angle > Math.PI) angle = 2 * Math.PI - angle;
+                
+                let ptRadius = p1.r !== undefined ? p1.r : 0;
+                let d = ptRadius / Math.tan(angle / 2);
+                d = Math.min(d, len1 / 2.05, len2 / 2.05); 
+                
+                let r_actual = d * Math.tan(angle / 2); 
+                if (isNaN(r_actual) || r_actual < 0.001) r_actual = 0;
+                
+                let t1x = p1.x + (dx1 / len1) * (r_actual > 0 ? d : 0); 
+                let t1y = p1.y + (dy1 / len1) * (r_actual > 0 ? d : 0);
+                let t2x = p1.x + (dx2 / len2) * (r_actual > 0 ? d : 0); 
+                let t2y = p1.y + (dy2 / len2) * (r_actual > 0 ? d : 0);
+                
+                let sweepFlag = (dx1 * dy2 - dy1 * dx2) <= 0 ? 1 : 0; 
+                
+                if (path === "") path += `M ${t1x} ${t1y} `; else path += `L ${t1x} ${t1y} `;
+                if (r_actual > 0) path += `A ${r_actual} ${r_actual} 0 0 ${sweepFlag} ${t2x} ${t2y} `; else path += `L ${t2x} ${t2y} `;
+            }
+            path += "Z";
+			
+			if (params.pixelToggle) {
+        let pSize = params.pixelSize || 8;
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        const p2d = new Path2D(path);
+        let solidCells = new Set();
+        let gridMin = Math.floor(-bounds / pSize) - 2, gridMax = Math.ceil(bounds / pSize) + 2;
+
+        for (let x = gridMin; x <= gridMax; x++) {
+            for (let y = gridMin; y <= gridMax; y++) {
+                if (tempCtx.isPointInPath(p2d, (x + 0.5) * pSize, (y + 0.5) * pSize)) solidCells.add(`${x},${y}`);
+            }
+        }
+
+        let edges = [];
+        for (let cell of solidCells) {
+            let [x, y] = cell.split(',').map(Number);
+            if (!solidCells.has(`${x},${y-1}`)) edges.push({x1: x, y1: y, x2: x+1, y2: y});
+            if (!solidCells.has(`${x+1},${y}`)) edges.push({x1: x+1, y1: y, x2: x+1, y2: y+1});
+            if (!solidCells.has(`${x},${y+1}`)) edges.push({x1: x+1, y1: y+1, x2: x, y2: y+1});
+            if (!solidCells.has(`${x-1},${y}`)) edges.push({x1: x, y1: y+1, x2: x, y2: y});
+        }
+
+        let loops = [];
+        while(edges.length > 0) {
+            let current = edges.pop(); let loop = [ {x: current.x1, y: current.y1}, {x: current.x2, y: current.y2} ];
+            let sanity = 10000;
+            while(sanity-- > 0) {
+                let nextIdx = edges.findIndex(e => e.x1 === loop[loop.length-1].x && e.y1 === loop[loop.length-1].y);
+                if (nextIdx !== -1) {
+                    let nextEdge = edges.splice(nextIdx, 1)[0];
+                    if (nextEdge.x2 === loop[0].x && nextEdge.y2 === loop[0].y) break;
+                    loop.push({x: nextEdge.x2, y: nextEdge.y2});
+                } else break;
+            }
+            loops.push(loop);
+        }
+
+        if (loops.length > 1) loops.sort((a, b) => b.length - a.length);
+        if (loops.length > 0) {
+            path = ""; // Zastępujemy gładką ścieżkę pikselowaną
+            let loop = loops[0];
+            path += `M ${loop[0].x * pSize} ${loop[0].y * pSize} `;
+            for (let i = 1; i < loop.length; i++) {
+                path += `L ${loop[i].x * pSize} ${loop[i].y * pSize} `;
+            }
+            path += "Z";
+        }
+    }
+            
+            let pad = 10;
+            let vb = `${-(bounds/2) - pad} ${-(bounds/2) - pad} ${bounds + pad*2} ${bounds + pad*2}`;
+            return { path, vb };
+        }
+
+        function renderGallery() {
+            const container = document.getElementById('presets-container');
+            container.innerHTML = '';
+            recipes[currentTab].forEach((recipe) => {
+                const card = document.createElement('div');
+                card.className = 'preset-card';
+                card.onclick = () => applyRecipe(recipe.params);
+                
+                let preview = createPreviewSVG(currentTab, recipe.params);
+                
+                card.innerHTML = `
+                    <div class="preset-placeholder">
+                        <svg viewBox="${preview.vb}" xmlns="http://www.w3.org/2000/svg">
+                            <path d="${preview.path}" fill="#005c91" />
+                        </svg>
+                    </div>
+                    <div class="preset-name">${recipe.name}</div>
+                    <div class="preset-desc">${recipe.desc}</div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function applyRecipe(params) {
+            for (let key in params) {
+                if (inputs[key]) {
+                    if (inputs[key].type === 'checkbox') inputs[key].checked = params[key];
+                    else inputs[key].value = params[key];
+                }
+            }
+            refreshToggles();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            update();
+        }
+
+        function refreshToggles() {
+            let polyStretchChecked = inputs.polyStretchToggle.checked;
+            document.getElementById('polyStretchWrapper').style.display = polyStretchChecked ? 'block' : 'none';
+            
+            if (polyStretchChecked) {
+                inputs.points.min = "4";
+                inputs.points.step = "2";
+                if (parseInt(inputs.points.value) % 2 !== 0) {
+                    inputs.points.value = parseInt(inputs.points.value) + 1;
+                }
+            } else {
+                inputs.points.min = "3";
+                inputs.points.step = "1";
+            }
+
+            document.getElementById('rectC1Wrapper').style.display = inputs.rectC1Toggle.checked ? 'block' : 'none';
+            document.getElementById('rectC2Wrapper').style.display = inputs.rectC2Toggle.checked ? 'block' : 'none';
+            document.getElementById('rectC3Wrapper').style.display = inputs.rectC3Toggle.checked ? 'block' : 'none';
+            document.getElementById('rectC4Wrapper').style.display = inputs.rectC4Toggle.checked ? 'block' : 'none';
+            document.getElementById('ellBWrapper').style.display = inputs.ellModeToggle.checked ? 'block' : 'none';
+            document.getElementById('ellStretchWrapper').style.display = inputs.ellStretchToggle.checked ? 'block' : 'none';
+            document.getElementById('pixelWrapper').style.display = inputs.pixelToggle.checked ? 'block' : 'none';
+        }
+
+        ['polyStretchToggle', 'rectC1Toggle', 'rectC2Toggle', 'rectC3Toggle', 'rectC4Toggle', 'ellModeToggle', 'ellStretchToggle', 'pixelToggle'].forEach(id => {
+            inputs[id].addEventListener('change', () => { refreshToggles(); update(); });
+        });
+
+        const canvas = document.getElementById('canvas');
+        const shapePath = document.getElementById('shape');
+        
+        const container3D = document.getElementById('canvas3d');
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 2000);
+        camera.position.set(0, -350, 350);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(260, 260); renderer.setPixelRatio(window.devicePixelRatio);
+        container3D.appendChild(renderer.domElement);
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true; controls.dampingFactor = 0.05;
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.6); dirLight.position.set(50, 100, 200); scene.add(dirLight);
+        const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3); dirLight2.position.set(-50, -100, -200); scene.add(dirLight2);
+        
+        let currentMesh = null;
+        const material3D = new THREE.MeshStandardMaterial({ color: 0x2b343b, roughness: 0.7, metalness: 0.2 });
+
+        function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
+        animate();
+
+        function update() {
+            document.getElementById('val-dia').textContent = inputs.dia.value;
+            document.getElementById('val-points').textContent = inputs.points.value;
+            document.getElementById('val-inner').textContent = inputs.inner.value + '%';
+            document.getElementById('val-corner').textContent = inputs.corner.value;
+            document.getElementById('val-polyStretch').textContent = inputs.polyStretch.value;
+            
+            document.getElementById('val-rectW').textContent = inputs.rectW.value;
+            document.getElementById('val-rectH').textContent = inputs.rectH.value;
+            document.getElementById('val-rectSkew').textContent = inputs.rectSkew.value;
+            document.getElementById('val-rectCorner').textContent = inputs.rectCorner.value;
+            document.getElementById('val-rectC1').textContent = inputs.rectC1.value;
+            document.getElementById('val-rectC2').textContent = inputs.rectC2.value;
+            document.getElementById('val-rectC3').textContent = inputs.rectC3.value;
+            document.getElementById('val-rectC4').textContent = inputs.rectC4.value;
+            
+            document.getElementById('val-ellA').textContent = inputs.ellA.value;
+            document.getElementById('val-ellB').textContent = inputs.ellB.value;
+            document.getElementById('val-ellStretch').textContent = inputs.ellStretch.value;
+            
+            document.getElementById('val-thick').textContent = inputs.thick.value;
+            document.getElementById('val-pixel').textContent = inputs.pixelSize.value;
+
+            generateBasePoints();
+            processShape(inputs.thick.value);
+        }
+
+        function generateBasePoints() {
+            rawShapePoints = [];
+            
+            if (currentTab === 'poly') {
+                let dia = parseFloat(inputs.dia.value);
+                let pts = parseInt(inputs.points.value);
+                
+                let inPercent = parseInt(inputs.inner.value);
+                let mappedPercent = inPercent * 0.95; 
+                let inRadius = (dia / 2) * (mappedPercent / 100);
+                
+                let polyCorner = parseFloat(inputs.corner.value);
+                let stretch = inputs.polyStretchToggle.checked ? parseFloat(inputs.polyStretch.value) : 0;
+                boundsLimit = dia + stretch;
+                
+                let angleStep = Math.PI / pts;
+                for (let i = 0; i < 2 * pts; i++) {
+                    let r = (i % 2 === 0) ? dia / 2 : inRadius;
+                    let a = -Math.PI / 2 + i * angleStep;
+                    let x = Math.cos(a) * r; let y = Math.sin(a) * r;
+                    if (stretch > 0) {
+                        if (Math.abs(x) < 1e-5) {
+                            if (y < 0) { rawShapePoints.push({x: x - stretch/2, y, r: polyCorner}, {x: x + stretch/2, y, r: polyCorner}); } 
+                            else { rawShapePoints.push({x: x + stretch/2, y, r: polyCorner}, {x: x - stretch/2, y, r: polyCorner}); }
+                        } else if (x > 0) rawShapePoints.push({x: x + stretch/2, y, r: polyCorner});
+                        else rawShapePoints.push({x: x - stretch/2, y, r: polyCorner});
+                    } else rawShapePoints.push({x, y, r: polyCorner});
+                }
+            } 
+            else if (currentTab === 'rect') {
+                let w = parseFloat(inputs.rectW.value);
+                let h = parseFloat(inputs.rectH.value);
+                let skewDeg = parseFloat(inputs.rectSkew.value);
+                let defCorner = parseFloat(inputs.rectCorner.value);
+                
+                let r1 = inputs.rectC1Toggle.checked ? parseFloat(inputs.rectC1.value) : defCorner;
+                let r2 = inputs.rectC2Toggle.checked ? parseFloat(inputs.rectC2.value) : defCorner;
+                let r3 = inputs.rectC3Toggle.checked ? parseFloat(inputs.rectC3.value) : defCorner;
+                let r4 = inputs.rectC4Toggle.checked ? parseFloat(inputs.rectC4.value) : defCorner;
+                
+                boundsLimit = Math.max(w, h) * 1.5;
+                let skewOffset = (h / 2) * Math.tan(skewDeg * Math.PI / 180);
+                
+                rawShapePoints = [
+                    { x: w/2 + skewOffset, y: -h/2, r: r1 },
+                    { x: w/2 - skewOffset, y: h/2, r: r2 },
+                    { x: -w/2 - skewOffset, y: h/2, r: r3 },
+                    { x: -w/2 + skewOffset, y: -h/2, r: r4 }
+                ];
+            }
+            else if (currentTab === 'ellipse') {
+                let rx = parseFloat(inputs.ellA.value) / 2;
+                let ry = inputs.ellModeToggle.checked ? parseFloat(inputs.ellB.value) / 2 : rx; 
+                let stretch = inputs.ellStretchToggle.checked ? parseFloat(inputs.ellStretch.value) : 0;
+                
+                boundsLimit = (Math.max(rx, ry) * 2) + stretch;
+                let segments = 64; 
+                
+                if (stretch > 0) {
+                    for(let i=0; i<=segments/2; i++) {
+                        let a = -Math.PI/2 + (i / (segments/2)) * Math.PI;
+                        rawShapePoints.push({ x: stretch/2 + rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                    for(let i=0; i<=segments/2; i++) {
+                        let a = Math.PI/2 + (i / (segments/2)) * Math.PI;
+                        rawShapePoints.push({ x: -stretch/2 + rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                } else {
+                    for(let i=0; i<segments; i++) {
+                        let a = -Math.PI/2 + (i / segments) * 2 * Math.PI;
+                        rawShapePoints.push({ x: rx * Math.cos(a), y: ry * Math.sin(a), r: 0 });
+                    }
+                }
+            }
+        }
+
+        function processShape(thickness) {
+            let svgPathStr = "";
+            currentDxfLines = [];
+            let len = rawShapePoints.length;
+            let lastDxfPoint = null, firstDxfPoint = null;
+            
+            for (let i = 0; i < len; i++) {
+                let p0 = rawShapePoints[(i - 1 + len) % len];
+                let p1 = rawShapePoints[i];
+                let p2 = rawShapePoints[(i + 1) % len];
+                
+                let dx1 = p0.x - p1.x; let dy1 = p0.y - p1.y;
+                let dx2 = p2.x - p1.x; let dy2 = p2.y - p1.y;
+                let len1 = Math.hypot(dx1, dy1), len2 = Math.hypot(dx2, dy2);
+                if (len1 < 0.001 || len2 < 0.001) continue; 
+                
+                let a1 = Math.atan2(dy1, dx1), a2 = Math.atan2(dy2, dx2);
+                let angle = Math.abs(a1 - a2); if (angle > Math.PI) angle = 2 * Math.PI - angle;
+                
+                let ptRadius = p1.r !== undefined ? p1.r : 0;
+                
+                let d = ptRadius / Math.tan(angle / 2);
+                d = Math.min(d, len1 / 2.05, len2 / 2.05); 
+                
+                let r_actual = d * Math.tan(angle / 2); 
+                if (isNaN(r_actual) || r_actual < 0.001) r_actual = 0;
+                
+                let t1x = p1.x + (dx1 / len1) * (r_actual > 0 ? d : 0); 
+                let t1y = p1.y + (dy1 / len1) * (r_actual > 0 ? d : 0);
+                let t2x = p1.x + (dx2 / len2) * (r_actual > 0 ? d : 0); 
+                let t2y = p1.y + (dy2 / len2) * (r_actual > 0 ? d : 0);
+                
+                let sweepFlag = (dx1 * dy2 - dy1 * dx2) <= 0 ? 1 : 0; 
+                
+                if (svgPathStr === "") svgPathStr += `M ${t1x} ${t1y} `; else svgPathStr += `L ${t1x} ${t1y} `;
+                if (r_actual > 0) svgPathStr += `A ${r_actual} ${r_actual} 0 0 ${sweepFlag} ${t2x} ${t2y} `; else svgPathStr += `L ${t2x} ${t2y} `;
+
+                if (lastDxfPoint) currentDxfLines.push({x1: lastDxfPoint.x, y1: lastDxfPoint.y, x2: t1x, y2: t1y});
+                else firstDxfPoint = {x: t1x, y: t1y};
+
+                if (r_actual > 0) {
+                    let nx = -dy1 / len1, ny = dx1 / len1;
+                    let cx1 = t1x + nx * r_actual, cy1 = t1y + ny * r_actual;
+                    let cx2 = t1x - nx * r_actual, cy2 = t1y - ny * r_actual;
+                    let dist1 = Math.hypot(t2x - cx1, t2y - cy1), dist2 = Math.hypot(t2x - cx2, t2y - cy2);
+                    let arcCx = Math.abs(dist1 - r_actual) < Math.abs(dist2 - r_actual) ? cx1 : cx2;
+                    let arcCy = Math.abs(dist1 - r_actual) < Math.abs(dist2 - r_actual) ? cy1 : cy2;
+                    
+                    let ang1 = Math.atan2(t1y - arcCy, t1x - arcCx), ang2 = Math.atan2(t2y - arcCy, t2x - arcCx);
+                    let delta = ang2 - ang1; while(delta > Math.PI) delta -= 2*Math.PI; while(delta < -Math.PI) delta += 2*Math.PI;
+                    
+                    let segments = Math.max(8, Math.ceil(r_actual * Math.abs(delta) * 2));
+                    let prevPt = {x: t1x, y: t1y};
+                    for(let j = 1; j <= segments; j++) {
+                        let pt = { x: arcCx + r_actual * Math.cos(ang1 + delta * (j/segments)), y: arcCy + r_actual * Math.sin(ang1 + delta * (j/segments)) };
+                        currentDxfLines.push({x1: prevPt.x, y1: prevPt.y, x2: pt.x, y2: pt.y});
+                        prevPt = pt;
+                    }
+                    lastDxfPoint = {x: t2x, y: t2y};
+                } else lastDxfPoint = {x: t2x, y: t2y};
+            }
+            if (lastDxfPoint && firstDxfPoint) currentDxfLines.push({x1: lastDxfPoint.x, y1: lastDxfPoint.y, x2: firstDxfPoint.x, y2: firstDxfPoint.y});
+            svgPathStr += "Z";
+
+            if (inputs.pixelToggle.checked) {
+                let pSize = parseFloat(inputs.pixelSize.value);
+                const tempCanvas = document.createElement('canvas'); const tempCtx = tempCanvas.getContext('2d');
+                const p2d = new Path2D(svgPathStr);
+                let solidCells = new Set();
+                let gridMin = Math.floor(-boundsLimit / pSize) - 2, gridMax = Math.ceil(boundsLimit / pSize) + 2;
+                
+                for (let x = gridMin; x <= gridMax; x++) {
+                    for (let y = gridMin; y <= gridMax; y++) {
+                        if (tempCtx.isPointInPath(p2d, (x + 0.5) * pSize, (y + 0.5) * pSize)) solidCells.add(`${x},${y}`);
+                    }
+                }
+                
+                let edges = [];
+                for (let cell of solidCells) {
+                    let [x, y] = cell.split(',').map(Number);
+                    if (!solidCells.has(`${x},${y-1}`)) edges.push({x1: x, y1: y, x2: x+1, y2: y});
+                    if (!solidCells.has(`${x+1},${y}`)) edges.push({x1: x+1, y1: y, x2: x+1, y2: y+1});
+                    if (!solidCells.has(`${x},${y+1}`)) edges.push({x1: x+1, y1: y+1, x2: x, y2: y+1});
+                    if (!solidCells.has(`${x-1},${y}`)) edges.push({x1: x, y1: y+1, x2: x, y2: y});
+                }
+
+                let loops = [];
+                while(edges.length > 0) {
+                    let current = edges.pop(); let loop = [ {x: current.x1, y: current.y1}, {x: current.x2, y: current.y2} ];
+                    let sanity = 10000;
+                    while(sanity-- > 0) {
+                        let nextIdx = edges.findIndex(e => e.x1 === loop[loop.length-1].x && e.y1 === loop[loop.length-1].y);
+                        if (nextIdx !== -1) {
+                            let nextEdge = edges.splice(nextIdx, 1)[0];
+                            if (nextEdge.x2 === loop[0].x && nextEdge.y2 === loop[0].y) break;
+                            loop.push({x: nextEdge.x2, y: nextEdge.y2});
+                        } else break;
+                    }
+                    loops.push(loop);
+                }
+                
+                if (loops.length > 1) loops.sort((a, b) => b.length - a.length);
+                svgPathStr = ""; currentDxfLines = [];
+                if (loops.length > 0) {
+                    let loop = loops[0];
+                    let startX = loop[0].x * pSize, startY = loop[0].y * pSize;
+                    svgPathStr += `M ${startX} ${startY} `;
+                    for (let i = 1; i < loop.length; i++) {
+                        let x = loop[i].x * pSize, y = loop[i].y * pSize;
+                        svgPathStr += `L ${x} ${y} `;
+                        currentDxfLines.push({x1: loop[i-1].x * pSize, y1: loop[i-1].y * pSize, x2: x, y2: y});
+                    }
+                    svgPathStr += "Z";
+                    currentDxfLines.push({x1: loop[loop.length - 1].x * pSize, y1: loop[loop.length - 1].y * pSize, x2: startX, y2: startY});
+                }
+            }
+
+            let pad = 20;
+            canvas.setAttribute('viewBox', `${-(boundsLimit/2) - pad} ${-(boundsLimit/2) - pad} ${boundsLimit + pad*2} ${boundsLimit + pad*2}`);
+            shapePath.setAttribute('d', svgPathStr);
+            
+            if (currentMesh) { scene.remove(currentMesh); currentMesh.geometry.dispose(); }
+            if (currentDxfLines.length > 0) {
+                const shape = new THREE.Shape();
+                shape.moveTo(currentDxfLines[0].x1, -currentDxfLines[0].y1);
+                for(let i=0; i<currentDxfLines.length; i++) shape.lineTo(currentDxfLines[i].x2, -currentDxfLines[i].y2);
+                const geometry = new THREE.ExtrudeGeometry(shape, { depth: thickness, bevelEnabled: false });
+                geometry.computeBoundingBox(); geometry.translate(-geometry.boundingBox.getCenter(new THREE.Vector3()).x, -geometry.boundingBox.getCenter(new THREE.Vector3()).y, -thickness / 2);
+                currentMesh = new THREE.Mesh(geometry, material3D); scene.add(currentMesh);
+            }
+        }
+
+        function downloadSVG() { triggerDownload(new XMLSerializer().serializeToString(canvas), "forme.svg", "image/svg+xml"); }
+        function downloadDXF() {
+            let dxf = "  0\nSECTION\n  2\nENTITIES\n";
+            currentDxfLines.forEach(l => { dxf += `  0\nLINE\n  8\n0\n 10\n${l.x1.toFixed(4)}\n 20\n${(-l.y1).toFixed(4)}\n 30\n0.0\n 11\n${l.x2.toFixed(4)}\n 21\n${(-l.y2).toFixed(4)}\n 31\n0.0\n`; });
+            dxf += "  0\nENDSEC\n  0\nEOF\n";
+            triggerDownload(dxf, "forme.dxf", "application/dxf");
+        }
+        function triggerDownload(content, filename, type) {
+            const blob = new Blob([content], { type: type + ";charset=utf-8" });
+            const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = filename;
+            document.body.appendChild(link); link.click(); document.body.removeChild(link); URL.revokeObjectURL(url);
+        }
+
+        Object.values(inputs).forEach(input => input.addEventListener('input', update));
+        
+        renderGallery();
+        update();
+    </script>
+</body>
+</html>
