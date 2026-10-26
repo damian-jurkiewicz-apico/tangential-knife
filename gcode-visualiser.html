@@ -65,10 +65,8 @@
         .range-slider-container input[type="range"] { position: absolute; width: 100%; pointer-events: auto; -webkit-appearance: none; appearance: none; height: 0; background: none; outline: none; margin: 0; }
         .range-slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4ec9b0; cursor: pointer; border: 2px solid #fff; position: relative; z-index: 20; }
         .range-slider-container input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #4ec9b0; cursor: pointer; border: 2px solid #fff; position: relative; z-index: 20; }
-
-        input[type="range"].error-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; background: #444; border-radius: 3px; outline: none; margin-top: 5px; margin-bottom: 10px; }
-        input[type="range"].error-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: #ff3333; cursor: pointer; }
-        input[type="range"].error-slider::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: #ff3333; cursor: pointer; }
+        
+        .cfg-input { background: #1e1e1e; color: #ccc; border: 1px solid #3c3c3c; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -98,9 +96,34 @@
             <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>
         </div>
         <hr style="border: 0; border-top: 1px solid #333; margin: 8px 0;">
+        
         <label class="checkbox-container">
-            <input type="checkbox" id="toggle-air-moves" checked> Show Air Moves (Z > 10)
+            <input type="checkbox" id="toggle-air-moves" checked> 
+            <span id="label-air-moves">Show Air Moves (Z > 16)</span>
         </label>
+
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 4px; margin: 8px 0 12px 0; border: 1px solid #333; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="panel-height">Panel Height:</label>
+                <select id="panel-height" class="cfg-input" style="width: 100px;">
+                    <option value="16" selected>16 mm</option>
+                    <option value="9">9 mm</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="air-threshold">Air Move Z Cutoff:</label>
+                <input type="number" id="air-threshold" class="cfg-input" value="16" step="0.5" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="air-mode">Air Qualify Mode:</label>
+                <select id="air-mode" class="cfg-input" style="width: 100px;">
+                    <option value="gt" selected>Z &gt; Cutoff</option>
+                    <option value="lt">Z &lt; Cutoff</option>
+                </select>
+            </div>
+        </div>
+
         <label class="checkbox-container">
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
         </label>
@@ -110,14 +133,6 @@
         <label class="checkbox-container">
             <input type="checkbox" id="toggle-q-labels"> Show Knife Angle Line Numbers (N)
         </label>
-
-        <hr style="border: 0; border-top: 1px solid #333; margin: 12px 0;">
-        <label class="checkbox-container" style="color: #fff;">
-            <input type="checkbox" id="toggle-error-path" checked> 
-            <span style="color: #ff3333; font-weight: bold; margin-right: 4px;">■</span> Offset Error Path
-        </label>
-        <div style="font-size: 12px; color: #aaa; margin-top: 8px;">Knife Excentricity (E): <span id="error-val-display" style="color: #ff3333; font-weight: bold;">0.0</span> mm</div>
-        <input type="range" id="error-slider" class="error-slider" min="0" max="20" step="0.1" value="0">
     </div>
 
     <div class="panel-section">
@@ -169,9 +184,8 @@
                     <span>Fast (Dark Green)</span>
                 </div>
             </div>
-            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> Air moves (Z > 10)</div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> <span id="legend-air-text">Air moves (G00)</span></div>
             <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
-            <div class="legend-item"><div class="legend-color" style="background:#ff3333"></div> Error path (Uncentered tool)</div>
         </div>
     </div>
 
@@ -193,21 +207,6 @@
     const wrapper = document.getElementById('canvas-wrapper');
     const canvas = document.getElementById('canvas3d');
     const textarea = document.getElementById('gcode-text');
-    
-    // Dodanie kontrolek UI kierunku błędu do sekcji Display Options
-    const displayOptionsPanel = document.getElementById('error-slider').parentElement;
-    const errorDirContainer = document.createElement('div');
-    errorDirContainer.style.cssText = 'font-size: 12px; color: #aaa; margin-top: 4px; margin-bottom: 8px;';
-    errorDirContainer.innerHTML = `
-        <label for="error-dir-select" style="display: block; margin-bottom: 4px;">Initial Error Direction:</label>
-        <select id="error-dir-select" style="width: 100%; padding: 4px; background: #1e1e1e; color: #ccc; border: 1px solid #3c3c3c; border-radius: 4px;">
-            <option value="0">+Y (0° Ahead)</option>
-            <option value="90">-X (+90° Left)</option>
-            <option value="180">-Y (+180° Behind)</option>
-            <option value="270">+X (+270° Right)</option>
-        </select>
-    `;
-    displayOptionsPanel.appendChild(errorDirContainer);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x1e1e1e);
@@ -238,7 +237,6 @@
     let qArrowsGroup = new THREE.Group();
     let zLabelsGroup = new THREE.Group();
     let qLabelsGroup = new THREE.Group();
-    let errorGroup = new THREE.Group();
 
     zLabelsGroup.visible = false;
     qLabelsGroup.visible = false;
@@ -247,7 +245,6 @@
     scene.add(qArrowsGroup);
     scene.add(zLabelsGroup);
     scene.add(qLabelsGroup);
-    scene.add(errorGroup);
 
     const raycaster = new THREE.Raycaster();
     raycaster.params.Line.threshold = 1.5;
@@ -259,11 +256,52 @@
     const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
 
     let totalGCodeLines = 0;
-    
-    // Zmienne błędu
-    let knifeOffsetError = parseFloat(document.getElementById('error-slider').value);
-    let knifeErrorDirectionDeg = parseFloat(document.getElementById('error-dir-select').value);
-    let parsedPathData = [];
+
+    const panelHeightSelect = document.getElementById('panel-height');
+    const airThresholdInput = document.getElementById('air-threshold');
+    const airModeSelect = document.getElementById('air-mode');
+
+    function getAirThreshold() {
+        return parseFloat(airThresholdInput.value) || 16;
+    }
+
+	function isAirMove(zStart, zEnd) {
+        const threshold = getAirThreshold();
+        if (airModeSelect.value === 'lt') {
+            return Math.min(zStart, zEnd) < threshold;
+        }
+        return Math.max(zStart, zEnd) > threshold;
+    }
+
+    function syncUI() {
+        const threshold = getAirThreshold();
+        const sign = airModeSelect.value === 'lt' ? '<' : '>';
+        const desc = `Show Air Moves (Z ${sign} ${threshold})`;
+        document.getElementById('label-air-moves').innerText = desc;
+        document.getElementById('legend-air-text').innerText = `Air moves G00 (Z ${sign} ${threshold})`;
+    }
+
+    panelHeightSelect.addEventListener('change', (e) => {
+        if (e.target.value !== 'custom') {
+            airThresholdInput.value = e.target.value;
+            syncUI();
+            if (textarea.value.trim()) parseGCode(textarea.value);
+        }
+    });
+
+    airThresholdInput.addEventListener('input', () => {
+        const val = parseFloat(airThresholdInput.value);
+        if (val === 16) panelHeightSelect.value = '16';
+        else if (val === 9) panelHeightSelect.value = '9';
+        else panelHeightSelect.value = 'custom';
+        syncUI();
+        if (textarea.value.trim()) parseGCode(textarea.value);
+    });
+
+    airModeSelect.addEventListener('change', () => {
+        syncUI();
+        if (textarea.value.trim()) parseGCode(textarea.value);
+    });
 
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
@@ -337,7 +375,6 @@
         if (qArrowsGroup.visible) clickable.push(...qArrowsGroup.children);
         if (zLabelsGroup.visible) clickable.push(...zLabelsGroup.children);
         if (qLabelsGroup.visible) clickable.push(...qLabelsGroup.children);
-        if (errorGroup.visible) clickable.push(...errorGroup.children);
         return clickable.filter(obj => obj.visible);
     }
 
@@ -422,7 +459,7 @@
             });
         };
         feedGroupsMap.forEach(grp => processGroup(grp));
-        processGroup(airGroup); processGroup(qArrowsGroup); processGroup(zLabelsGroup); processGroup(qLabelsGroup); processGroup(errorGroup);
+        processGroup(airGroup); processGroup(qArrowsGroup); processGroup(zLabelsGroup); processGroup(qLabelsGroup);
     }
 
     window.addEventListener('resize', () => {
@@ -433,85 +470,10 @@
 
     function clearGroup(group) { while(group.children.length > 0) group.remove(group.children[0]); }
 
-    // Generowanie ścieżki błędu z uwzględnieniem kierunku bazowego
-    function generateErrorPath() {
-        clearGroup(errorGroup);
-        if (knifeOffsetError === 0) return;
-
-        const cutErrorMat = new THREE.LineBasicMaterial({ color: 0xff3333, linewidth: 2 });
-        const airErrorMat = new THREE.LineBasicMaterial({ color: 0xff8888, transparent: true, opacity: 0.5 });
-
-        // Dodatkowy kąt przesunięcia z listy wyboru
-        const baseOffsetDeg = knifeErrorDirectionDeg;
-
-        parsedPathData.forEach(data => {
-            let mesh;
-            const mat = data.isCutting ? cutErrorMat : airErrorMat;
-
-            if (data.prevX === data.curX && data.prevY === data.curY && data.prevQ !== data.curQ) {
-                const arcPoints = [];
-                const segments = 15;
-                for (let s = 0; s <= segments; s++) {
-                    const alpha = s / segments;
-                    const interpQ = data.prevQ + alpha * (data.curQ - data.prevQ);
-                    const rad = (interpQ + 90 + baseOffsetDeg) * (Math.PI / 180);
-                    const errX = data.curX + knifeOffsetError * Math.cos(rad);
-                    const errY = data.curY + knifeOffsetError * Math.sin(rad);
-                    arcPoints.push(new THREE.Vector3(errX, errY, data.curZ));
-                }
-                const geo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                mesh = new THREE.Line(geo, mat);
-            } 
-            else if (data.mode === 'G02' || data.mode === 'G03') {
-                const startAngle = Math.atan2(data.prevY - data.centerY, data.prevX - data.centerX);
-                let endAngle = Math.atan2(data.curY - data.centerY, data.curX - data.centerX);
-                const isClockwise = (data.mode === 'G02');
-                if (isClockwise && endAngle >= startAngle) endAngle -= 2 * Math.PI;
-                if (!isClockwise && endAngle <= startAngle) endAngle += 2 * Math.PI;
-
-                const arcPoints = [];
-                const segments = 20;
-                for (let s = 0; s <= segments; s++) {
-                    const alpha = s / segments;
-                    const angle = startAngle + alpha * (endAngle - startAngle);
-                    const rawX = data.centerX + Math.cos(angle) * Math.hypot(data.i, data.j);
-                    const rawY = data.centerY + Math.sin(angle) * Math.hypot(data.i, data.j);
-                    const rawZ = data.prevZ + alpha * (data.curZ - data.prevZ);
-
-                    const interpQ = data.prevQ + alpha * (data.curQ - data.prevQ);
-                    const rad = (interpQ + 90 + baseOffsetDeg) * (Math.PI / 180);
-                    
-                    const errX = rawX + knifeOffsetError * Math.cos(rad);
-                    const errY = rawY + knifeOffsetError * Math.sin(rad);
-                    arcPoints.push(new THREE.Vector3(errX, errY, rawZ));
-                }
-                const geo = new THREE.BufferGeometry().setFromPoints(arcPoints);
-                mesh = new THREE.Line(geo, mat);
-            } else {
-                const radPrev = (data.prevQ + 90 + baseOffsetDeg) * (Math.PI / 180);
-                const radCur = (data.curQ + 90 + baseOffsetDeg) * (Math.PI / 180);
-                const pX = data.prevX + knifeOffsetError * Math.cos(radPrev);
-                const pY = data.prevY + knifeOffsetError * Math.sin(radPrev);
-                const cX = data.curX + knifeOffsetError * Math.cos(radCur);
-                const cY = data.curY + knifeOffsetError * Math.sin(radCur);
-                
-                const geo = new THREE.BufferGeometry().setFromPoints([
-                    new THREE.Vector3(pX, pY, data.prevZ),
-                    new THREE.Vector3(cX, cY, data.curZ)
-                ]);
-                mesh = new THREE.Line(geo, mat);
-            }
-
-            mesh.userData = { lineIndex: data.lineIndex };
-            errorGroup.add(mesh);
-        });
-    }
-
     function parseGCode(gcode) {
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
-        clearGroup(airGroup); clearGroup(qArrowsGroup); clearGroup(zLabelsGroup); clearGroup(qLabelsGroup); clearGroup(errorGroup);
-        parsedPathData = [];
+        clearGroup(airGroup); clearGroup(qArrowsGroup); clearGroup(zLabelsGroup); clearGroup(qLabelsGroup);
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -522,31 +484,91 @@
         rangeEndInput.min = 0; rangeEndInput.max = totalGCodeLines - 1; rangeEndInput.value = totalGCodeLines - 1;
         document.getElementById('slider-total-val').innerText = totalGCodeLines;
 
-        let minF = Infinity, maxF = -Infinity; let tempF = 1000; const detectedFeedrates = new Set();
+        let minF = Infinity, maxF = -Infinity; let tempF = 1000; 
+        const feeds = { XY: new Set(), Z: new Set(), Q: new Set(), AIR: new Set() };
+        let scanMode = 'G01';
+        let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
         
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim().toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
+            
+            if (line.includes('G00') || line.includes('G0')) scanMode = 'G00';
+            if (line.includes('G01') || line.includes('G1')) scanMode = 'G01';
+            if (line.includes('G02') || line.includes('G2')) scanMode = 'G02';
+            if (line.includes('G03') || line.includes('G3')) scanMode = 'G03';
+
             const fMatch = line.match(/F([-+]?[0-9]*\.?[0-9]+)/);
             if (fMatch) tempF = parseFloat(fMatch[1]);
-            if (!line.includes('G00') && !line.includes('G0')) { minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF); detectedFeedrates.add(tempF); }
+            
+            let prevX = scanX, prevY = scanY, prevZ = scanZ, prevQ = scanQ;
+
+            const xMatch = line.match(/X([-+]?[0-9]*\.?[0-9]+)/);
+            const yMatch = line.match(/Y([-+]?[0-9]*\.?[0-9]+)/);
+            const zMatch = line.match(/Z([-+]?[0-9]*\.?[0-9]+)/);
+            const qMatch = line.match(/Q1=([-+]?[0-9]*\.?[0-9]+)/);
+
+            if (xMatch) scanX = parseFloat(xMatch[1]);
+            if (yMatch) scanY = parseFloat(yMatch[1]);
+            if (zMatch) scanZ = parseFloat(zMatch[1]);
+            if (qMatch) scanQ = parseFloat(qMatch[1]);
+
+            if (scanMode !== 'G00') { 
+                minF = Math.min(minF, tempF); 
+                maxF = Math.max(maxF, tempF); 
+                
+                const isAir = isAirMove(prevZ, scanZ);
+                const changedX = prevX !== scanX;
+                const changedY = prevY !== scanY;
+                const changedZ = prevZ !== scanZ;
+                const changedQ = prevQ !== scanQ;
+
+                if (isAir) {
+                    feeds.AIR.add(tempF);
+                } else if (changedX || changedY) {
+                    feeds.XY.add(tempF);
+                } else if (changedZ && !changedX && !changedY) {
+                    feeds.Z.add(tempF);
+                } else if (changedQ && !changedX && !changedY && !changedZ) {
+                    feeds.Q.add(tempF);
+                }
+            }
         }
-        if (minF === Infinity) { minF = 0; maxF = 1000; detectedFeedrates.add(1000); }
+        if (minF === Infinity) { minF = 0; maxF = 1000; feeds.XY.add(1000); }
 
         const feedContainer = document.getElementById('feedrate-checkboxes');
-        feedContainer.innerHTML = '<div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>';
+        feedContainer.innerHTML = '';
 
-        Array.from(detectedFeedrates).sort((a, b) => a - b).forEach((fVal) => {
-            const grp = new THREE.Group(); scene.add(grp); feedGroupsMap.set(fVal, grp);
-            const c = getColorForFeedrate(fVal, minF, maxF); const hexColor = '#' + c.getHexString();
-            const lbl = document.createElement('label'); lbl.className = 'checkbox-container';
-            lbl.innerHTML = `<input type="checkbox" checked data-feed="${fVal}"> <span class="feed-color-badge" style="background:${hexColor}"></span> F${fVal}`;
-            lbl.querySelector('input').addEventListener('change', (e) => {
-                const targetF = parseFloat(e.target.getAttribute('data-feed'));
-                if (feedGroupsMap.has(targetF)) feedGroupsMap.get(targetF).visible = e.target.checked;
+        for (const [category, feedSet] of Object.entries(feeds)) {
+            if (feedSet.size === 0) continue;
+            
+            const catLabel = document.createElement('div');
+            catLabel.style.cssText = 'font-size: 12px; color: #888; margin: 8px 0 4px 0; font-weight: bold;';
+            catLabel.innerText = `Feed (F) - ${category}:`;
+            feedContainer.appendChild(catLabel);
+
+            Array.from(feedSet).sort((a, b) => a - b).forEach((fVal) => {
+                const groupKey = `${category}_${fVal}`;
+                const grp = new THREE.Group(); 
+                scene.add(grp); 
+                feedGroupsMap.set(groupKey, grp);
+                
+                const c = getColorForFeedrate(fVal, minF, maxF); 
+                const hexColor = '#' + c.getHexString();
+                
+                const lbl = document.createElement('label'); 
+                lbl.className = 'checkbox-container';
+                lbl.innerHTML = `<input type="checkbox" checked data-group="${groupKey}"> <span class="feed-color-badge" style="background:${hexColor}"></span> F${fVal}`;
+                
+                lbl.querySelector('input').addEventListener('change', (e) => {
+                    const targetGrp = e.target.getAttribute('data-group');
+                    if (feedGroupsMap.has(targetGrp)) {
+                        feedGroupsMap.get(targetGrp).visible = e.target.checked;
+                    }
+                });
+                feedContainer.appendChild(lbl);
             });
-            feedContainer.appendChild(lbl);
-        });
+        }
 
         let curX = 0, curY = 0, curZ = 0, curQ = 0, curF = tempF;
         let motionMode = 'G01'; let pointsCount = 0; let rotations = 0;
@@ -594,9 +616,28 @@
             minY = Math.min(minY, curY); maxY = Math.max(maxY, curY);
             minZ = Math.min(minZ, curZ); maxZ = Math.max(maxZ, curZ);
 
-            const isCutting = curZ <= 10 && motionMode !== 'G00';
-            let mat = isCutting ? new THREE.LineBasicMaterial({ color: getColorForFeedrate(curF, minF, maxF) }) : rapidMaterial;
-            let targetGroup = isCutting ? (feedGroupsMap.get(curF) || airGroup) : airGroup;
+            const isAir = isAirMove(prevZ, curZ);
+            const changedX = prevX !== curX;
+            const changedY = prevY !== curY;
+            const changedZ = prevZ !== curZ;
+            const changedQ = prevQ !== curQ;
+
+            let mat, targetGroup;
+
+            if (motionMode === 'G00') {
+                mat = rapidMaterial;
+                targetGroup = airGroup;
+            } else {
+                let category = 'XY';
+                if (isAir) category = 'AIR';
+                else if (changedX || changedY) category = 'XY';
+                else if (changedZ && !changedX && !changedY) category = 'Z';
+                else if (changedQ && !changedX && !changedY && !changedZ) category = 'Q';
+
+                const groupKey = `${category}_${curF}`;
+                targetGroup = feedGroupsMap.get(groupKey) || airGroup;
+                mat = new THREE.LineBasicMaterial({ color: getColorForFeedrate(curF, minF, maxF) });
+            }
 
             let I = 0, J = 0, centerX = 0, centerY = 0;
             if (motionMode === 'G02' || motionMode === 'G03') {
@@ -605,12 +646,6 @@
             }
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ || prevQ !== curQ) {
-                parsedPathData.push({
-                    prevX, prevY, prevZ, prevQ, curX, curY, curZ, curQ,
-                    mode: motionMode, i: I, j: J, centerX, centerY,
-                    isCutting, lineIndex: i
-                });
-
                 if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
                     const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
                     if (isPureZLift) {
@@ -642,7 +677,6 @@
             }
         }
 
-        generateErrorPath();
         updateSliderUI();
 
         if (minX !== Infinity) {
@@ -658,22 +692,14 @@
         }
     }
 
-    // Obsługa zmodyfikowanych zdarzeń UI dla błędu
-    document.getElementById('error-slider').addEventListener('input', (e) => {
-        knifeOffsetError = parseFloat(e.target.value);
-        document.getElementById('error-val-display').innerText = knifeOffsetError.toFixed(1);
-        generateErrorPath();
-        filterPathByLineRange(parseInt(rangeStartInput.value), parseInt(rangeEndInput.value));
+    document.getElementById('toggle-air-moves').addEventListener('change', (e) => {
+        airGroup.visible = e.target.checked;
+        feedGroupsMap.forEach((grp, key) => {
+            if (key.startsWith('AIR_')) grp.visible = e.target.checked;
+        });
+        document.querySelectorAll('input[data-group^="AIR_"]').forEach(cb => cb.checked = e.target.checked);
     });
 
-    document.getElementById('error-dir-select').addEventListener('change', (e) => {
-        knifeErrorDirectionDeg = parseFloat(e.target.value);
-        generateErrorPath();
-        filterPathByLineRange(parseInt(rangeStartInput.value), parseInt(rangeEndInput.value));
-    });
-
-    document.getElementById('toggle-error-path').addEventListener('change', (e) => { errorGroup.visible = e.target.checked; });
-    document.getElementById('toggle-air-moves').addEventListener('change', (e) => airGroup.visible = e.target.checked );
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
     document.getElementById('toggle-z-labels').addEventListener('change', (e) => zLabelsGroup.visible = e.target.checked );
     document.getElementById('toggle-q-labels').addEventListener('change', (e) => qLabelsGroup.visible = e.target.checked );
@@ -688,6 +714,8 @@
     document.getElementById('parse-text-btn').addEventListener('click', () => parseGCode(textarea.value) );
     textarea.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
     textarea.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
+
+    syncUI();
 
     function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
     animate();
