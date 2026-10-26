@@ -46,12 +46,6 @@
         #canvas-wrapper { flex: 1; position: relative; width: 100%; height: 100%; }
         #canvas3d { width: 100%; height: 100%; display: block; }
         
-        #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; z-index: 10; }
-        .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
-        .gradient-bar { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #004d1a, #00ff66); border: 1px solid #555; margin-bottom: 2px; }
-        .gradient-labels { display: flex; justify-content: space-between; width: 120px; font-size: 10px; color: #aaa; margin-top: 2px; }
-
         #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 10; }
         .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
         .pad-btn:hover { background: #0e639c; }
@@ -67,9 +61,19 @@
         .range-slider-container input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #4ec9b0; cursor: pointer; border: 2px solid #fff; position: relative; z-index: 20; }
         
         .cfg-input { background: #1e1e1e; color: #ccc; border: 1px solid #3c3c3c; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
+
+        #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d8a4e; color: white; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none; opacity: 0; transition: opacity 0.3s ease; z-index: 1000; }
+        .toast-visible { opacity: 1 !important; }
     </style>
+    <!-- Główne biblioteki Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Biblioteki Line2 potrzebne do skalowania grubości linii -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineSegmentsGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineGeometry.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineMaterial.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineSegments2.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/Line2.js"></script>
 </head>
 <body>
 
@@ -112,7 +116,7 @@
             </div>
         </div>
 
-        <label class="checkbox-container">
+        <label class="checkbox-container" style="margin-bottom: 12px;">
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
         </label>
     </div>
@@ -139,6 +143,28 @@
         Min / Max Y: <span id="stat-y">0 / 0</span><br>
         Z Depth (min/max): <span id="stat-z">0 / 0</span>
     </div>
+
+    <div class="panel-section">
+        <details open>
+            <summary style="cursor: pointer; color: #fff; font-weight: bold; font-size: 13px; user-select: none; background: #333; padding: 6px; border-radius: 4px;">
+                Advanced Options (Suwaki)
+            </summary>
+            <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; padding: 0 5px;">
+                <div>
+                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Długość wektora (Knife): <span id="vector-length-val" style="color:#4ec9b0;">6</span></label>
+                    <input type="range" id="vector-length-slider" min="1" max="30" value="6" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div>
+                    <label for="feed-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki cięcia (Feed): <span id="feed-thickness-val" style="color:#4ec9b0;">2</span></label>
+                    <input type="range" id="feed-thickness-slider" min="1" max="10" value="2" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div>
+                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki jałowej (Air): <span id="air-thickness-val" style="color:#4ec9b0;">1</span></label>
+                    <input type="range" id="air-thickness-slider" min="1" max="10" value="1" style="width: 100%; margin-top: 4px;">
+                </div>
+            </div>
+        </details>
+    </div>
 </div>
 
 <div id="viewer-container">
@@ -156,19 +182,6 @@
             <button class="pad-btn" onclick="rotateCamera(0, 15)" title="Rotate Down">▼</button>
             <div></div>
         </div>
-
-        <div id="overlay">
-            <div style="margin-bottom: 6px; font-weight: bold;">Speed (Feedrate F):</div>
-            <div style="margin-bottom: 8px;">
-                <div class="gradient-bar"></div>
-                <div class="gradient-labels">
-                    <span>Slow (Dark)</span>
-                    <span>Fast (Bright)</span>
-                </div>
-            </div>
-            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> <span id="legend-air-text">Air moves G00</span></div>
-            <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
-        </div>
     </div>
 
     <div id="slider-bar">
@@ -184,6 +197,8 @@
         </div>
     </div>
 </div>
+
+<div id="toast">Copied line!</div>
 
 <script>
     const wrapper = document.getElementById('canvas-wrapper');
@@ -207,10 +222,20 @@
     controls.enablePan = true;
     controls.enableZoom = true;
     controls.screenSpacePanning = true;
-
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
     let panelMesh = null;
+    let globalVectorLength = 6; 
+    let globalFeedThickness = 2;
+    let globalAirThickness = 1;
+    
+    let activeFeedMaterials = [];
+    let activeAirMaterial = null;
+    const highlightMaterial = new THREE.LineMaterial({
+        color: 0xffff00,
+        linewidth: 4,
+        resolution: new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight)
+    });
 
     function updatePanelBox() {
         if (panelMesh) {
@@ -232,7 +257,6 @@
         panelMesh.add(line);
 
         panelMesh.position.set(width / 2, length / 2, height / 2);
-        
         scene.add(panelMesh);
     }
 
@@ -254,29 +278,14 @@
     let selectedGCodeText = "";
     let hoveredObject = null;
     let originalMaterial = null;
-    let originalScale = null;
-    const highlightMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, linewidth: 3 });
 
     let totalGCodeLines = 0;
 
     const airThresholdInput = document.getElementById('air-threshold');
-
-    function getAirThreshold() {
-        return parseFloat(airThresholdInput.value) || 16;
-    }
-
-	function isAirMove(zStart, zEnd) {
-        const threshold = getAirThreshold();
-        return Math.max(zStart, zEnd) > threshold;
-    }
-
-    function syncUI() {
-        const threshold = getAirThreshold();
-        document.getElementById('legend-air-text').innerText = `Air moves G00 (Z > ${threshold})`;
-    }
+    function getAirThreshold() { return parseFloat(airThresholdInput.value) || 16; }
+	function isAirMove(zStart, zEnd) { return Math.max(zStart, zEnd) > getAirThreshold(); }
 
     airThresholdInput.addEventListener('input', () => {
-        syncUI();
         updatePanelBox();
         if (textarea.value.trim()) parseGCode(textarea.value);
     });
@@ -326,16 +335,10 @@
 
     function getColorForFeedrate(f, minF, maxF, category) {
         let t = (maxF === minF) ? 1 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
-        
-        if (category === 'AIR') {
-            return new THREE.Color(0.6 + t * 0.4, 0.4 + t * 0.6, 0.0);
-        } else if (category === 'XY') {
-            return new THREE.Color(0.0, 0.3 + t * 0.7, 0.1 + t * 0.3);
-        } else if (category === 'Z') {
-            return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
-        } else { // Q
-            return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
-        }
+        if (category === 'AIR') return new THREE.Color(0.6 + t * 0.4, 0.4 + t * 0.6, 0.0);
+        else if (category === 'XY') return new THREE.Color(0.0, 0.3 + t * 0.7, 0.1 + t * 0.3);
+        else if (category === 'Z') return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
+        else return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
     }
 
     function getClickableObjects() {
@@ -361,7 +364,10 @@
                 if (targetObj && targetObj.userData && targetObj.userData.lineIndex !== undefined) {
                     hoveredObject = targetObj;
                     canvas.style.cursor = 'pointer';
-                    if (hoveredObject.isLine) { originalMaterial = hoveredObject.material; hoveredObject.material = highlightMaterial; } 
+                    if (hoveredObject.material) { 
+                        originalMaterial = hoveredObject.material; 
+                        hoveredObject.material = highlightMaterial; 
+                    } 
                 }
             }
         } else resetHoveredObject();
@@ -369,9 +375,18 @@
 
     function resetHoveredObject() {
         if (hoveredObject) {
-            if (hoveredObject.isLine && originalMaterial) hoveredObject.material = originalMaterial;
+            if (originalMaterial && hoveredObject.material) hoveredObject.material = originalMaterial;
             hoveredObject = null; originalMaterial = null; canvas.style.cursor = 'default';
         }
+    }
+
+    let toastTimeout;
+    function showToast(msg) {
+        const toast = document.getElementById('toast');
+        toast.innerText = msg;
+        toast.classList.add('toast-visible');
+        clearTimeout(toastTimeout);
+        toastTimeout = setTimeout(() => { toast.classList.remove('toast-visible'); }, 2000);
     }
 
     canvas.addEventListener('click', (event) => {
@@ -380,10 +395,19 @@
         mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
         const intersects = raycaster.intersectObjects(getClickableObjects(), true);
+        
         if (intersects.length > 0) {
             let clickedObject = intersects[0].object;
             while (clickedObject && (clickedObject.userData.lineIndex === undefined) && clickedObject.parent) clickedObject = clickedObject.parent;
-            if (clickedObject && clickedObject.userData && clickedObject.userData.lineIndex !== undefined) displaySelectedLine(clickedObject.userData.lineIndex);
+            
+            if (clickedObject && clickedObject.userData && clickedObject.userData.lineIndex !== undefined) {
+                displaySelectedLine(clickedObject.userData.lineIndex);
+                if (selectedGCodeText) {
+                    navigator.clipboard.writeText(selectedGCodeText).then(() => {
+                        showToast("Copied line: " + selectedGCodeText);
+                    });
+                }
+            }
         }
     });
 
@@ -394,7 +418,34 @@
             const originalText = btn.innerText;
             btn.innerText = "Copied!"; btn.style.background = "#2d8a4e";
             setTimeout(() => { btn.innerText = originalText; btn.style.background = "#333"; }, 1200);
+            showToast("Copied line!");
         });
+    });
+
+    const vectorLengthSlider = document.getElementById('vector-length-slider');
+    const vectorLengthVal = document.getElementById('vector-length-val');
+    vectorLengthSlider.addEventListener('input', (e) => {
+        globalVectorLength = parseFloat(e.target.value);
+        vectorLengthVal.innerText = globalVectorLength;
+        qArrowsGroup.children.forEach(arrow => {
+            if (arrow.setLength) arrow.setLength(globalVectorLength, globalVectorLength * 0.4, globalVectorLength * 0.3);
+        });
+    });
+
+    const feedThicknessSlider = document.getElementById('feed-thickness-slider');
+    const feedThicknessVal = document.getElementById('feed-thickness-val');
+    feedThicknessSlider.addEventListener('input', (e) => {
+        globalFeedThickness = parseFloat(e.target.value);
+        feedThicknessVal.innerText = globalFeedThickness;
+        activeFeedMaterials.forEach(mat => mat.linewidth = globalFeedThickness);
+    });
+
+    const airThicknessSlider = document.getElementById('air-thickness-slider');
+    const airThicknessVal = document.getElementById('air-thickness-val');
+    airThicknessSlider.addEventListener('input', (e) => {
+        globalAirThickness = parseFloat(e.target.value);
+        airThicknessVal.innerText = globalAirThickness;
+        if (activeAirMaterial) activeAirMaterial.linewidth = globalAirThickness;
     });
 
     const rangeStartInput = document.getElementById('range-start');
@@ -432,6 +483,11 @@
         camera.aspect = wrapper.clientWidth / wrapper.clientHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
+        
+        const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
+        if (highlightMaterial) highlightMaterial.resolution.copy(res);
+        if (activeAirMaterial) activeAirMaterial.resolution.copy(res);
+        activeFeedMaterials.forEach(mat => mat.resolution.copy(res));
     });
 
     function clearGroup(group) { while(group.children.length > 0) group.remove(group.children[0]); }
@@ -440,6 +496,7 @@
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
         clearGroup(airGroup); clearGroup(qArrowsGroup);
+        activeFeedMaterials = [];
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -480,27 +537,17 @@
             if (qMatch) scanQ = parseFloat(qMatch[1]);
 
             if (scanMode !== 'G00') { 
-                minF = Math.min(minF, tempF); 
-                maxF = Math.max(maxF, tempF); 
-                
+                minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF); 
                 const isAir = isAirMove(prevZ, scanZ);
-                const changedX = prevX !== scanX;
-                const changedY = prevY !== scanY;
-                const changedZ = prevZ !== scanZ;
-                const changedQ = prevQ !== scanQ;
-                
+                const changedX = prevX !== scanX; const changedY = prevY !== scanY;
+                const changedZ = prevZ !== scanZ; const changedQ = prevQ !== scanQ;
                 const hasMovement = changedX || changedY || changedZ;
 
-                if (changedQ && !hasMovement) {
-                    feeds.Q.add(tempF);
-                } else if (hasMovement) {
-                    if (isAir) {
-                        feeds.AIR.add(tempF);
-                    } else if (changedX || changedY) {
-                        feeds.XY.add(tempF);
-                    } else if (changedZ && !changedX && !changedY) {
-                        feeds.Z.add(tempF);
-                    }
+                if (changedQ && !hasMovement) feeds.Q.add(tempF);
+                else if (hasMovement) {
+                    if (isAir) feeds.AIR.add(tempF);
+                    else if (changedX || changedY) feeds.XY.add(tempF);
+                    else if (changedZ && !changedX && !changedY) feeds.Z.add(tempF);
                 }
             }
         }
@@ -532,9 +579,7 @@
                 
                 lbl.querySelector('input').addEventListener('change', (e) => {
                     const targetGrp = e.target.getAttribute('data-group');
-                    if (feedGroupsMap.has(targetGrp)) {
-                        feedGroupsMap.get(targetGrp).visible = e.target.checked;
-                    }
+                    if (feedGroupsMap.has(targetGrp)) feedGroupsMap.get(targetGrp).visible = e.target.checked;
                 });
                 feedContainer.appendChild(lbl);
             });
@@ -543,13 +588,23 @@
         let curX = 0, curY = 0, curZ = 0, curQ = 0, curF = tempF;
         let motionMode = 'G01'; let pointsCount = 0; let rotations = 0;
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        const rapidMaterial = new THREE.LineBasicMaterial({ color: 0xffaa00 });
+        
+        const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
+        highlightMaterial.resolution.copy(res);
+        
+        activeAirMaterial = new THREE.LineMaterial({ 
+            color: 0xffaa00, 
+            linewidth: globalAirThickness,
+            resolution: res
+        });
+        
+        const materialsMap = new Map();
 
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
 
-            const nMatch = line.match(/^N([0-9]+)/); const lineLabel = nMatch ? `N${nMatch[1]}` : `N${i + 1}`;
+            const nMatch = line.match(/^N([0-9]+)/);
             if (line.includes('G00') || line.includes('G0')) motionMode = 'G00';
             if (line.includes('G01') || line.includes('G1')) motionMode = 'G01';
             if (line.includes('G02') || line.includes('G2')) motionMode = 'G02';
@@ -572,10 +627,10 @@
             
             if (qMatch) {
                 curQ = parseFloat(qMatch[1]); rotations++;
-                const arrowLength = 6; const rad = (curQ + 90) * (Math.PI / 180);
+                const rad = (curQ + 90) * (Math.PI / 180);
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
-                const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
+                const arrowHelper = new THREE.ArrowHelper(dir, origin, globalVectorLength, 0xff0055, globalVectorLength * 0.4, globalVectorLength * 0.3);
                 arrowHelper.userData = { lineIndex: i }; qArrowsGroup.add(arrowHelper);
             }
 
@@ -584,16 +639,14 @@
             minZ = Math.min(minZ, curZ); maxZ = Math.max(maxZ, curZ);
 
             const isAir = isAirMove(prevZ, curZ);
-            const changedX = prevX !== curX;
-            const changedY = prevY !== curY;
-            const changedZ = prevZ !== curZ;
-            const changedQ = prevQ !== curQ;
+            const changedX = prevX !== curX; const changedY = prevY !== curY;
+            const changedZ = prevZ !== curZ; const changedQ = prevQ !== curQ;
             const hasMovement = changedX || changedY || changedZ;
 
             let mat, targetGroup;
 
             if (motionMode === 'G00') {
-                mat = rapidMaterial;
+                mat = activeAirMaterial;
                 targetGroup = airGroup;
             } else {
                 let category = 'XY';
@@ -606,7 +659,17 @@
 
                 const groupKey = `${category}_${curF}`;
                 targetGroup = feedGroupsMap.get(groupKey) || airGroup;
-                mat = new THREE.LineBasicMaterial({ color: getColorForFeedrate(curF, minF, maxF, category) });
+                
+                if (!materialsMap.has(groupKey)) {
+                    const lineMat = new THREE.LineMaterial({ 
+                        color: getColorForFeedrate(curF, minF, maxF, category).getHex(), 
+                        linewidth: globalFeedThickness,
+                        resolution: res
+                    });
+                    materialsMap.set(groupKey, lineMat);
+                    activeFeedMaterials.push(lineMat);
+                }
+                mat = materialsMap.get(groupKey);
             }
 
             let I = 0, J = 0, centerX = 0, centerY = 0;
@@ -625,14 +688,24 @@
                         if (isClockwise && endAngle >= startAngle) endAngle -= 2 * Math.PI;
                         if (!isClockwise && endAngle <= startAngle) endAngle += 2 * Math.PI;
 
-                        const arcPoints = []; const segments = 20;
+                        const positions = []; const segments = 20;
                         for (let s = 0; s <= segments; s++) {
                             const alpha = s / segments; const angle = startAngle + alpha * (endAngle - startAngle);
-                            arcPoints.push(new THREE.Vector3(centerX + Math.cos(angle) * Math.hypot(I, J), centerY + Math.sin(angle) * Math.hypot(I, J), prevZ + alpha * (curZ - prevZ)));
+                            positions.push(
+                                centerX + Math.cos(angle) * Math.hypot(I, J), 
+                                centerY + Math.sin(angle) * Math.hypot(I, J), 
+                                prevZ + alpha * (curZ - prevZ)
+                            );
                         }
-                        lineMesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints(arcPoints), mat);
+                        const geom = new THREE.LineGeometry();
+                        geom.setPositions(positions);
+                        lineMesh = new THREE.Line2(geom, mat);
+                        lineMesh.computeLineDistances();
                     } else {
-                        lineMesh = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(prevX, prevY, prevZ), new THREE.Vector3(curX, curY, curZ)]), mat);
+                        const geom = new THREE.LineGeometry();
+                        geom.setPositions([prevX, prevY, prevZ, curX, curY, curZ]);
+                        lineMesh = new THREE.Line2(geom, mat);
+                        lineMesh.computeLineDistances();
                     }
                     lineMesh.userData = { lineIndex: i };
                     targetGroup.add(lineMesh);
@@ -668,8 +741,6 @@
     document.getElementById('parse-text-btn').addEventListener('click', () => parseGCode(textarea.value) );
     textarea.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
     textarea.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
-
-    syncUI();
 
     function animate() { requestAnimationFrame(animate); controls.update(); renderer.render(scene, camera); }
     animate();
