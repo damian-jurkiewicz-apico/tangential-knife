@@ -96,11 +96,6 @@
             <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>
         </div>
         <hr style="border: 0; border-top: 1px solid #333; margin: 8px 0;">
-        
-        <label class="checkbox-container">
-            <input type="checkbox" id="toggle-air-moves" checked> 
-            <span id="label-air-moves">Show Air Moves (Z > 16)</span>
-        </label>
 
         <div style="background: #1e1e1e; padding: 10px; border-radius: 4px; margin: 8px 0 12px 0; border: 1px solid #333; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -112,15 +107,7 @@
                 <input type="number" id="panel-length" class="cfg-input" value="2440" style="width: 100px; text-align: right; color: #4ec9b0;">
             </div>
             <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label for="panel-height">Panel Height:</label>
-                <select id="panel-height" class="cfg-input" style="width: 100px;">
-                    <option value="16" selected>16 mm</option>
-                    <option value="9">9 mm</option>
-                    <option value="custom">Custom</option>
-                </select>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label for="air-threshold">Air Move Z Cutoff:</label>
+                <label for="air-threshold">Panel Height (Z Cutoff):</label>
                 <input type="number" id="air-threshold" class="cfg-input" value="16" step="0.5" style="width: 100px; text-align: right; color: #4ec9b0;">
             </div>
         </div>
@@ -234,9 +221,7 @@
 
         const width = parseFloat(document.getElementById('panel-width').value) || 1220;
         const length = parseFloat(document.getElementById('panel-length').value) || 2440;
-        
-        const panelHeightVal = document.getElementById('panel-height').value;
-        const height = parseFloat(panelHeightVal === 'custom' ? document.getElementById('air-threshold').value : panelHeightVal) || 16;
+        const height = parseFloat(document.getElementById('air-threshold').value) || 16;
 
         const geometry = new THREE.BoxGeometry(width, length, height);
         const material = new THREE.MeshBasicMaterial({ color: 0x3a3a3a, transparent: true, opacity: 0.4 });
@@ -255,8 +240,6 @@
 
     document.getElementById('panel-width').addEventListener('input', updatePanelBox);
     document.getElementById('panel-length').addEventListener('input', updatePanelBox);
-    document.getElementById('panel-height').addEventListener('change', updatePanelBox);
-    document.getElementById('air-threshold').addEventListener('input', updatePanelBox);
 
     let feedGroupsMap = new Map(); 
     let airGroup = new THREE.Group();
@@ -276,7 +259,6 @@
 
     let totalGCodeLines = 0;
 
-    const panelHeightSelect = document.getElementById('panel-height');
     const airThresholdInput = document.getElementById('air-threshold');
 
     function getAirThreshold() {
@@ -290,25 +272,12 @@
 
     function syncUI() {
         const threshold = getAirThreshold();
-        const desc = `Show Air Moves (Z > ${threshold})`;
-        document.getElementById('label-air-moves').innerText = desc;
         document.getElementById('legend-air-text').innerText = `Air moves G00 (Z > ${threshold})`;
     }
 
-    panelHeightSelect.addEventListener('change', (e) => {
-        if (e.target.value !== 'custom') {
-            airThresholdInput.value = e.target.value;
-            syncUI();
-            if (textarea.value.trim()) parseGCode(textarea.value);
-        }
-    });
-
     airThresholdInput.addEventListener('input', () => {
-        const val = parseFloat(airThresholdInput.value);
-        if (val === 16) panelHeightSelect.value = '16';
-        else if (val === 9) panelHeightSelect.value = '9';
-        else panelHeightSelect.value = 'custom';
         syncUI();
+        updatePanelBox();
         if (textarea.value.trim()) parseGCode(textarea.value);
     });
 
@@ -686,14 +655,6 @@
             document.getElementById('stat-z').innerText = `${minZ.toFixed(1)} / ${maxZ.toFixed(1)}`;
         }
     }
-
-    document.getElementById('toggle-air-moves').addEventListener('change', (e) => {
-        airGroup.visible = e.target.checked;
-        feedGroupsMap.forEach((grp, key) => {
-            if (key.startsWith('AIR_')) grp.visible = e.target.checked;
-        });
-        document.querySelectorAll('input[data-group^="AIR_"]').forEach(cb => cb.checked = e.target.checked);
-    });
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
     
