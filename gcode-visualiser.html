@@ -151,16 +151,16 @@
             </summary>
             <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; padding: 0 5px;">
                 <div>
-                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Długość wektora (Knife): <span id="vector-length-val" style="color:#4ec9b0;">6</span></label>
-                    <input type="range" id="vector-length-slider" min="1" max="30" value="6" style="width: 100%; margin-top: 4px;">
+                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Długość wektora (Knife): <span id="vector-length-val" style="color:#4ec9b0;">50%</span></label>
+                    <input type="range" id="vector-length-slider" min="0" max="100" value="50" style="width: 100%; margin-top: 4px;">
                 </div>
                 <div>
                     <label for="feed-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki cięcia (Feed): <span id="feed-thickness-val" style="color:#4ec9b0;">2</span></label>
-                    <input type="range" id="feed-thickness-slider" min="1" max="10" value="2" style="width: 100%; margin-top: 4px;">
+                    <input type="range" id="feed-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
                 </div>
                 <div>
-                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki jałowej (Air): <span id="air-thickness-val" style="color:#4ec9b0;">1</span></label>
-                    <input type="range" id="air-thickness-slider" min="1" max="10" value="1" style="width: 100%; margin-top: 4px;">
+                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki jałowej (Air): <span id="air-thickness-val" style="color:#4ec9b0;">2</span></label>
+                    <input type="range" id="air-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
                 </div>
             </div>
         </details>
@@ -209,6 +209,7 @@
     scene.background = new THREE.Color(0x1e1e1e);
 
     const camera = new THREE.PerspectiveCamera(45, wrapper.clientWidth / wrapper.clientHeight, 0.1, 10000);
+    camera.up.set(0, 0, 1); // Z do gory - musi byc ustawione przed utworzeniem OrbitControls
     let currentTarget = new THREE.Vector3(0, 0, 0);
     let defaultDistance = 300;
 
@@ -218,23 +219,29 @@
     const controls = new THREE.OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.enableRotate = false;
+    controls.enableRotate = true;
+    controls.rotateSpeed = 0.8;
+    controls.minPolarAngle = 0;
+    controls.maxPolarAngle = Math.PI / 2; // nie schodzimy pod panel
     controls.enablePan = true;
     controls.enableZoom = true;
     controls.screenSpacePanning = true;
-    controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
+    controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
     let panelMesh = null;
-    let globalVectorLength = 6; 
+    let globalVectorLength = 50;
     let globalFeedThickness = 2;
-    let globalAirThickness = 1;
+    let globalAirThickness = 2;
     
-    let activeFeedMaterials = [];
-    let activeAirMaterial = null;
+    let allFeedMaterials = [];
+    let allAirMaterials = [];
+    
     const highlightMaterial = new THREE.LineMaterial({
         color: 0xffff00,
         linewidth: 4,
-        resolution: new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight)
+        resolution: new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight),
+        transparent: true,
+        opacity: 1
     });
 
     function updatePanelBox() {
@@ -249,8 +256,9 @@
         const height = parseFloat(document.getElementById('air-threshold').value) || 16;
 
         const geometry = new THREE.BoxGeometry(width, length, height);
-        const material = new THREE.MeshBasicMaterial({ color: 0x3a3a3a, transparent: true, opacity: 0.4 });
+        const material = new THREE.MeshBasicMaterial({ color: 0x3a3a3a, transparent: true, opacity: 0.4, depthWrite: false });
         panelMesh = new THREE.Mesh(geometry, material);
+        panelMesh.renderOrder = -1; // panel zawsze pod liniami, nie przyciemnia ich
 
         const edges = new THREE.EdgesGeometry(geometry);
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x666666 }));
@@ -272,8 +280,10 @@
     scene.add(airGroup);
     scene.add(qArrowsGroup);
 
+    // FIX: dodanie konfiguracji raycastera dla Line2
     const raycaster = new THREE.Raycaster();
-    raycaster.params.Line.threshold = 1.5;
+    raycaster.params.Line.threshold = 4;
+    raycaster.params.Line2 = { threshold: 4 }; // Zwiększony próg detekcji kliknięć
     const mouse = new THREE.Vector2();
     let selectedGCodeText = "";
     let hoveredObject = null;
@@ -333,10 +343,27 @@
         document.getElementById('selected-line-text').innerText = lineContent || '(Empty line)';
     }
 
+    // Zakres F liczony osobno dla każdej kategorii (AIR / XY / Z / Q),
+    // dzięki temu np. F800 vs F2000 w AIR dostaje skrajne kolory, a nie sąsiednie.
+    let feedRanges = {};
+
+    // Pastelowa paleta: mniejsze nasycenie + wyższa jasność (dobrze widoczne na ciemnym tle).
+    // Wystarczy zmienić te dwie wartości, żeby ją przyciemnić / wysycić.
+    const PASTEL_S = 0.65;
+    const PASTEL_L = 0.68;
+
+    function hslColor(hueDeg, s, l) {
+        return new THREE.Color().setHSL(hueDeg / 360, s, l);
+    }
+
     function getColorForFeedrate(f, minF, maxF, category) {
-        let t = (maxF === minF) ? 1 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
-        if (category === 'AIR') return new THREE.Color(0.6 + t * 0.4, 0.4 + t * 0.6, 0.0);
-        else if (category === 'XY') return new THREE.Color(0.0, 0.3 + t * 0.7, 0.1 + t * 0.3);
+        const r = feedRanges[category];
+        if (r) { minF = r.min; maxF = r.max; }
+        let t = (maxF === minF) ? 0 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
+        // AIR: pastelowy żółty (52°) -> koralowa czerwień (0°), najwolniejszy = żółty, najszybszy = czerwony
+        if (category === 'AIR') return hslColor(52 - t * 52, PASTEL_S, PASTEL_L);
+        // XY: miętowa zieleń (130°) -> błękit (230°)
+        else if (category === 'XY') return hslColor(130 + t * 100, PASTEL_S, PASTEL_L);
         else if (category === 'Z') return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
         else return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
     }
@@ -349,28 +376,31 @@
         return clickable.filter(obj => obj.visible);
     }
 
-    canvas.addEventListener('mousemove', (event) => {
+    function updateMouseFromEvent(event) {
         const rect = canvas.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
         raycaster.setFromCamera(mouse, camera);
-        const intersects = raycaster.intersectObjects(getClickableObjects(), true);
+    }
 
-        if (intersects.length > 0) {
-            let targetObj = intersects[0].object;
-            while (targetObj && (targetObj.userData.lineIndex === undefined) && targetObj.parent) targetObj = targetObj.parent;
-            if (hoveredObject !== targetObj) {
-                resetHoveredObject();
-                if (targetObj && targetObj.userData && targetObj.userData.lineIndex !== undefined) {
-                    hoveredObject = targetObj;
-                    canvas.style.cursor = 'pointer';
-                    if (hoveredObject.material) { 
-                        originalMaterial = hoveredObject.material; 
-                        hoveredObject.material = highlightMaterial; 
-                    } 
-                }
+    canvas.addEventListener('mousemove', (event) => {
+        updateMouseFromEvent(event);
+        const intersects = raycaster.intersectObjects(getClickableObjects(), true);
+        let targetObj = intersects.length ? intersects[0].object : null;
+        while (targetObj && targetObj.userData.lineIndex === undefined && targetObj.parent) targetObj = targetObj.parent;
+        if (!targetObj || targetObj.userData.lineIndex === undefined) {
+            resetHoveredObject();
+            return;
+        }
+        if (hoveredObject !== targetObj) {
+            resetHoveredObject();
+            hoveredObject = targetObj;
+            canvas.style.cursor = 'pointer';
+            if (!hoveredObject.userData.isHitProxy && hoveredObject.material && hoveredObject.material !== highlightMaterial) {
+                originalMaterial = hoveredObject.material;
+                hoveredObject.material = highlightMaterial;
             }
-        } else resetHoveredObject();
+        }
     });
 
     function resetHoveredObject() {
@@ -389,24 +419,25 @@
         toastTimeout = setTimeout(() => { toast.classList.remove('toast-visible'); }, 2000);
     }
 
+    let downX = 0, downY = 0, wasDragged = false;
+    canvas.addEventListener('pointerdown', (e) => { downX = e.clientX; downY = e.clientY; wasDragged = false; });
+    canvas.addEventListener('pointermove', (e) => {
+        if (e.buttons && Math.hypot(e.clientX - downX, e.clientY - downY) > 4) wasDragged = true;
+    });
+
     canvas.addEventListener('click', (event) => {
-        const rect = canvas.getBoundingClientRect();
-        mouse.x = ((event.clientX - rect.left) / canvas.width) * 2 - 1;
-        mouse.y = -((event.clientY - rect.top) / canvas.height) * 2 + 1;
-        raycaster.setFromCamera(mouse, camera);
+        if (wasDragged) { wasDragged = false; return; } // to byl obrot kamery, nie klikniecie
+        updateMouseFromEvent(event);
         const intersects = raycaster.intersectObjects(getClickableObjects(), true);
-        
-        if (intersects.length > 0) {
-            let clickedObject = intersects[0].object;
-            while (clickedObject && (clickedObject.userData.lineIndex === undefined) && clickedObject.parent) clickedObject = clickedObject.parent;
-            
-            if (clickedObject && clickedObject.userData && clickedObject.userData.lineIndex !== undefined) {
-                displaySelectedLine(clickedObject.userData.lineIndex);
-                if (selectedGCodeText) {
-                    navigator.clipboard.writeText(selectedGCodeText).then(() => {
-                        showToast("Copied line: " + selectedGCodeText);
-                    });
-                }
+        if (!intersects.length) return;
+        let clickedObject = intersects[0].object;
+        while (clickedObject && clickedObject.userData.lineIndex === undefined && clickedObject.parent) clickedObject = clickedObject.parent;
+        if (clickedObject && clickedObject.userData.lineIndex !== undefined) {
+            displaySelectedLine(clickedObject.userData.lineIndex);
+            if (selectedGCodeText) {
+                navigator.clipboard.writeText(selectedGCodeText).then(() => {
+                    showToast("Copied line: " + selectedGCodeText);
+                }).catch(() => showToast("Line selected — use Copy Line to copy it."));
             }
         }
     });
@@ -425,8 +456,9 @@
     const vectorLengthSlider = document.getElementById('vector-length-slider');
     const vectorLengthVal = document.getElementById('vector-length-val');
     vectorLengthSlider.addEventListener('input', (e) => {
-        globalVectorLength = parseFloat(e.target.value);
-        vectorLengthVal.innerText = globalVectorLength;
+        const percent = parseFloat(e.target.value);
+        vectorLengthVal.innerText = percent + "%";
+        globalVectorLength = 20 + (percent / 100) * (80 - 20);
         qArrowsGroup.children.forEach(arrow => {
             if (arrow.setLength) arrow.setLength(globalVectorLength, globalVectorLength * 0.4, globalVectorLength * 0.3);
         });
@@ -437,7 +469,7 @@
     feedThicknessSlider.addEventListener('input', (e) => {
         globalFeedThickness = parseFloat(e.target.value);
         feedThicknessVal.innerText = globalFeedThickness;
-        activeFeedMaterials.forEach(mat => mat.linewidth = globalFeedThickness);
+        allFeedMaterials.forEach(mat => mat.linewidth = globalFeedThickness);
     });
 
     const airThicknessSlider = document.getElementById('air-thickness-slider');
@@ -445,7 +477,7 @@
     airThicknessSlider.addEventListener('input', (e) => {
         globalAirThickness = parseFloat(e.target.value);
         airThicknessVal.innerText = globalAirThickness;
-        if (activeAirMaterial) activeAirMaterial.linewidth = globalAirThickness;
+        allAirMaterials.forEach(mat => mat.linewidth = globalAirThickness);
     });
 
     const rangeStartInput = document.getElementById('range-start');
@@ -486,8 +518,8 @@
         
         const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
         if (highlightMaterial) highlightMaterial.resolution.copy(res);
-        if (activeAirMaterial) activeAirMaterial.resolution.copy(res);
-        activeFeedMaterials.forEach(mat => mat.resolution.copy(res));
+        allFeedMaterials.forEach(mat => mat.resolution.copy(res));
+        allAirMaterials.forEach(mat => mat.resolution.copy(res));
     });
 
     function clearGroup(group) { while(group.children.length > 0) group.remove(group.children[0]); }
@@ -496,7 +528,9 @@
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
         clearGroup(airGroup); clearGroup(qArrowsGroup);
-        activeFeedMaterials = [];
+        
+        allFeedMaterials = [];
+        allAirMaterials = [];
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -553,6 +587,13 @@
         }
         if (minF === Infinity) { minF = 0; maxF = 1000; feeds.XY.add(1000); }
 
+        feedRanges = {};
+        for (const [cat, set] of Object.entries(feeds)) {
+            if (set.size === 0) continue;
+            const arr = Array.from(set);
+            feedRanges[cat] = { min: Math.min(...arr), max: Math.max(...arr) };
+        }
+
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '';
 
@@ -592,13 +633,8 @@
         const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
         highlightMaterial.resolution.copy(res);
         
-        activeAirMaterial = new THREE.LineMaterial({ 
-            color: 0xffaa00, 
-            linewidth: globalAirThickness,
-            resolution: res
-        });
-        
         const materialsMap = new Map();
+        let airG00Material = null;
 
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
@@ -646,8 +682,18 @@
             let mat, targetGroup;
 
             if (motionMode === 'G00') {
-                mat = activeAirMaterial;
                 targetGroup = airGroup;
+                if (!airG00Material) {
+                    airG00Material = new THREE.LineMaterial({
+                        color: 0xffaa00,
+                        linewidth: globalAirThickness,
+                        resolution: res,
+                        transparent: true,
+                        opacity: 1
+                    });
+                    allAirMaterials.push(airG00Material);
+                }
+                mat = airG00Material;
             } else {
                 let category = 'XY';
                 if (changedQ && !hasMovement) category = 'Q';
@@ -661,13 +707,17 @@
                 targetGroup = feedGroupsMap.get(groupKey) || airGroup;
                 
                 if (!materialsMap.has(groupKey)) {
+                    let isAirCategory = (category === 'AIR');
                     const lineMat = new THREE.LineMaterial({ 
                         color: getColorForFeedrate(curF, minF, maxF, category).getHex(), 
-                        linewidth: globalFeedThickness,
-                        resolution: res
+                        linewidth: isAirCategory ? globalAirThickness : globalFeedThickness,
+                        resolution: res,
+                        transparent: true,
+                        opacity: 1
                     });
                     materialsMap.set(groupKey, lineMat);
-                    activeFeedMaterials.push(lineMat);
+                    if (isAirCategory) allAirMaterials.push(lineMat);
+                    else allFeedMaterials.push(lineMat);
                 }
                 mat = materialsMap.get(groupKey);
             }
@@ -681,6 +731,9 @@
             if (prevX !== curX || prevY !== curY || prevZ !== curZ || prevQ !== curQ) {
                 if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
                     let lineMesh;
+                    const geom = new THREE.LineGeometry();
+                    let hitPositions = [];
+                    
                     if (motionMode === 'G02' || motionMode === 'G03') {
                         const startAngle = Math.atan2(prevY - centerY, prevX - centerX);
                         let endAngle = Math.atan2(curY - centerY, curX - centerX);
@@ -697,18 +750,33 @@
                                 prevZ + alpha * (curZ - prevZ)
                             );
                         }
-                        const geom = new THREE.LineGeometry();
                         geom.setPositions(positions);
-                        lineMesh = new THREE.Line2(geom, mat);
-                        lineMesh.computeLineDistances();
+                        hitPositions = positions;
                     } else {
-                        const geom = new THREE.LineGeometry();
-                        geom.setPositions([prevX, prevY, prevZ, curX, curY, curZ]);
-                        lineMesh = new THREE.Line2(geom, mat);
-                        lineMesh.computeLineDistances();
+                        hitPositions = [prevX, prevY, prevZ, curX, curY, curZ];
+                        geom.setPositions(hitPositions);
                     }
+                    
+                    // FIX: Przeliczenie obwiedni dla geometrii - konieczne dla poprawnego raycastingu Line2
+                    geom.computeBoundingBox();
+                    geom.computeBoundingSphere();
+                    
+                    lineMesh = new THREE.Line2(geom, mat);
+                    lineMesh.computeLineDistances();
+                    
                     lineMesh.userData = { lineIndex: i };
+                    lineMesh.renderOrder = 1; // zawsze nad panelem
                     targetGroup.add(lineMesh);
+
+                    // Niewidzialna linia pomocnicza do wykrywania kliknięć.
+                    const hitGeometry = new THREE.BufferGeometry();
+                    hitGeometry.setAttribute('position', new THREE.Float32BufferAttribute(hitPositions, 3));
+                    const hitMaterial = new THREE.LineBasicMaterial({
+                        color: 0xffffff, transparent: true, opacity: 0, depthWrite: false
+                    });
+                    const hitLine = new THREE.Line(hitGeometry, hitMaterial);
+                    hitLine.userData = { lineIndex: i, isHitProxy: true };
+                    targetGroup.add(hitLine);
                     pointsCount++;
                 }
             }
