@@ -49,7 +49,7 @@
         #overlay { position: absolute; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); padding: 10px 15px; border-radius: 6px; font-size: 12px; pointer-events: none; border: 1px solid #444; z-index: 10; }
         .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
         .legend-color { width: 12px; height: 12px; border-radius: 2px; }
-        .gradient-bar { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #ffffff, #00ff66, #004d1a); border: 1px solid #555; }
+        .gradient-bar { width: 120px; height: 10px; border-radius: 2px; background: linear-gradient(to right, #004d1a, #00ff66); border: 1px solid #555; margin-bottom: 2px; }
         .gradient-labels { display: flex; justify-content: space-between; width: 120px; font-size: 10px; color: #aaa; margin-top: 2px; }
 
         #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 10; }
@@ -104,6 +104,14 @@
 
         <div style="background: #1e1e1e; padding: 10px; border-radius: 4px; margin: 8px 0 12px 0; border: 1px solid #333; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="panel-width">Panel Width (X):</label>
+                <input type="number" id="panel-width" class="cfg-input" value="1220" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="panel-length">Panel Length (Y):</label>
+                <input type="number" id="panel-length" class="cfg-input" value="2440" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
                 <label for="panel-height">Panel Height:</label>
                 <select id="panel-height" class="cfg-input" style="width: 100px;">
                     <option value="16" selected>16 mm</option>
@@ -115,23 +123,10 @@
                 <label for="air-threshold">Air Move Z Cutoff:</label>
                 <input type="number" id="air-threshold" class="cfg-input" value="16" step="0.5" style="width: 100px; text-align: right; color: #4ec9b0;">
             </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <label for="air-mode">Air Qualify Mode:</label>
-                <select id="air-mode" class="cfg-input" style="width: 100px;">
-                    <option value="gt" selected>Z &gt; Cutoff</option>
-                    <option value="lt">Z &lt; Cutoff</option>
-                </select>
-            </div>
         </div>
 
         <label class="checkbox-container">
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
-        </label>
-        <label class="checkbox-container">
-            <input type="checkbox" id="toggle-z-labels"> Show Z Lift Line Numbers (N)
-        </label>
-        <label class="checkbox-container">
-            <input type="checkbox" id="toggle-q-labels"> Show Knife Angle Line Numbers (N)
         </label>
     </div>
 
@@ -180,11 +175,11 @@
             <div style="margin-bottom: 8px;">
                 <div class="gradient-bar"></div>
                 <div class="gradient-labels">
-                    <span>Slow (White)</span>
-                    <span>Fast (Dark Green)</span>
+                    <span>Slow (Dark)</span>
+                    <span>Fast (Bright)</span>
                 </div>
             </div>
-            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> <span id="legend-air-text">Air moves (G00)</span></div>
+            <div class="legend-item"><div class="legend-color" style="background:#ffaa00"></div> <span id="legend-air-text">Air moves G00</span></div>
             <div class="legend-item"><div class="legend-color" style="background:#ff0055"></div> Knife orientation (Q1 Angle)</div>
         </div>
     </div>
@@ -228,23 +223,47 @@
 
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
-    const gridHelper = new THREE.GridHelper(500, 50, 0x444444, 0x222222);
-    gridHelper.rotation.x = Math.PI / 2;
-    scene.add(gridHelper);
+    let panelMesh = null;
+
+    function updatePanelBox() {
+        if (panelMesh) {
+            scene.remove(panelMesh);
+            panelMesh.geometry.dispose();
+            panelMesh.material.dispose();
+        }
+
+        const width = parseFloat(document.getElementById('panel-width').value) || 1220;
+        const length = parseFloat(document.getElementById('panel-length').value) || 2440;
+        
+        const panelHeightVal = document.getElementById('panel-height').value;
+        const height = parseFloat(panelHeightVal === 'custom' ? document.getElementById('air-threshold').value : panelHeightVal) || 16;
+
+        const geometry = new THREE.BoxGeometry(width, length, height);
+        const material = new THREE.MeshBasicMaterial({ color: 0x3a3a3a, transparent: true, opacity: 0.4 });
+        panelMesh = new THREE.Mesh(geometry, material);
+
+        const edges = new THREE.EdgesGeometry(geometry);
+        const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x666666 }));
+        panelMesh.add(line);
+
+        panelMesh.position.set(width / 2, length / 2, height / 2);
+        
+        scene.add(panelMesh);
+    }
+
+    updatePanelBox();
+
+    document.getElementById('panel-width').addEventListener('input', updatePanelBox);
+    document.getElementById('panel-length').addEventListener('input', updatePanelBox);
+    document.getElementById('panel-height').addEventListener('change', updatePanelBox);
+    document.getElementById('air-threshold').addEventListener('input', updatePanelBox);
 
     let feedGroupsMap = new Map(); 
     let airGroup = new THREE.Group();
     let qArrowsGroup = new THREE.Group();
-    let zLabelsGroup = new THREE.Group();
-    let qLabelsGroup = new THREE.Group();
-
-    zLabelsGroup.visible = false;
-    qLabelsGroup.visible = false;
 
     scene.add(airGroup);
     scene.add(qArrowsGroup);
-    scene.add(zLabelsGroup);
-    scene.add(qLabelsGroup);
 
     const raycaster = new THREE.Raycaster();
     raycaster.params.Line.threshold = 1.5;
@@ -259,7 +278,6 @@
 
     const panelHeightSelect = document.getElementById('panel-height');
     const airThresholdInput = document.getElementById('air-threshold');
-    const airModeSelect = document.getElementById('air-mode');
 
     function getAirThreshold() {
         return parseFloat(airThresholdInput.value) || 16;
@@ -267,18 +285,14 @@
 
 	function isAirMove(zStart, zEnd) {
         const threshold = getAirThreshold();
-        if (airModeSelect.value === 'lt') {
-            return Math.min(zStart, zEnd) < threshold;
-        }
         return Math.max(zStart, zEnd) > threshold;
     }
 
     function syncUI() {
         const threshold = getAirThreshold();
-        const sign = airModeSelect.value === 'lt' ? '<' : '>';
-        const desc = `Show Air Moves (Z ${sign} ${threshold})`;
+        const desc = `Show Air Moves (Z > ${threshold})`;
         document.getElementById('label-air-moves').innerText = desc;
-        document.getElementById('legend-air-text').innerText = `Air moves G00 (Z ${sign} ${threshold})`;
+        document.getElementById('legend-air-text').innerText = `Air moves G00 (Z > ${threshold})`;
     }
 
     panelHeightSelect.addEventListener('change', (e) => {
@@ -294,11 +308,6 @@
         if (val === 16) panelHeightSelect.value = '16';
         else if (val === 9) panelHeightSelect.value = '9';
         else panelHeightSelect.value = 'custom';
-        syncUI();
-        if (textarea.value.trim()) parseGCode(textarea.value);
-    });
-
-    airModeSelect.addEventListener('change', () => {
         syncUI();
         if (textarea.value.trim()) parseGCode(textarea.value);
     });
@@ -336,22 +345,6 @@
         controls.update();
     }
 
-    function createTextSprite(text, lineIndex, bgColor = 'rgba(255, 170, 0, 0.9)') {
-        const canvasText = document.createElement('canvas');
-        const ctx = canvasText.getContext('2d');
-        canvasText.width = 128; canvasText.height = 64;
-        ctx.fillStyle = bgColor; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.roundRect(4, 4, 120, 56, 8); ctx.fill(); ctx.stroke();
-        ctx.font = 'Bold 28px Monospace'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(text, 64, 32);
-        const texture = new THREE.CanvasTexture(canvasText);
-        const spriteMaterial = new THREE.SpriteMaterial({ map: texture, depthTest: false });
-        const sprite = new THREE.Sprite(spriteMaterial);
-        sprite.scale.set(12, 6, 1);
-        sprite.userData = { lineIndex: lineIndex };
-        return sprite;
-    }
-
     function displaySelectedLine(lineIndex) {
         const text = textarea.value;
         const lines = text.split('\n');
@@ -362,10 +355,18 @@
         document.getElementById('selected-line-text').innerText = lineContent || '(Empty line)';
     }
 
-    function getColorForFeedrate(f, minF, maxF) {
-        if (minF === maxF) return new THREE.Color(0x00ff66);
-        let t = Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
-        return new THREE.Color(1.0 - t * 1.0, 1.0 - t * 0.7, 1.0 - t * 0.9);
+    function getColorForFeedrate(f, minF, maxF, category) {
+        let t = (maxF === minF) ? 1 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
+        
+        if (category === 'AIR') {
+            return new THREE.Color(0.6 + t * 0.4, 0.4 + t * 0.6, 0.0);
+        } else if (category === 'XY') {
+            return new THREE.Color(0.0, 0.3 + t * 0.7, 0.1 + t * 0.3);
+        } else if (category === 'Z') {
+            return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
+        } else { // Q
+            return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
+        }
     }
 
     function getClickableObjects() {
@@ -373,8 +374,6 @@
         feedGroupsMap.forEach((grp) => { if (grp.visible) clickable.push(...grp.children); });
         if (airGroup.visible) clickable.push(...airGroup.children);
         if (qArrowsGroup.visible) clickable.push(...qArrowsGroup.children);
-        if (zLabelsGroup.visible) clickable.push(...zLabelsGroup.children);
-        if (qLabelsGroup.visible) clickable.push(...qLabelsGroup.children);
         return clickable.filter(obj => obj.visible);
     }
 
@@ -394,7 +393,6 @@
                     hoveredObject = targetObj;
                     canvas.style.cursor = 'pointer';
                     if (hoveredObject.isLine) { originalMaterial = hoveredObject.material; hoveredObject.material = highlightMaterial; } 
-                    else if (hoveredObject.isSprite) { originalScale = hoveredObject.scale.clone(); hoveredObject.scale.multiplyScalar(1.2); }
                 }
             }
         } else resetHoveredObject();
@@ -403,8 +401,7 @@
     function resetHoveredObject() {
         if (hoveredObject) {
             if (hoveredObject.isLine && originalMaterial) hoveredObject.material = originalMaterial;
-            else if (hoveredObject.isSprite && originalScale) hoveredObject.scale.copy(originalScale);
-            hoveredObject = null; originalMaterial = null; originalScale = null; canvas.style.cursor = 'default';
+            hoveredObject = null; originalMaterial = null; canvas.style.cursor = 'default';
         }
     }
 
@@ -459,7 +456,7 @@
             });
         };
         feedGroupsMap.forEach(grp => processGroup(grp));
-        processGroup(airGroup); processGroup(qArrowsGroup); processGroup(zLabelsGroup); processGroup(qLabelsGroup);
+        processGroup(airGroup); processGroup(qArrowsGroup);
     }
 
     window.addEventListener('resize', () => {
@@ -473,7 +470,7 @@
     function parseGCode(gcode) {
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
-        clearGroup(airGroup); clearGroup(qArrowsGroup); clearGroup(zLabelsGroup); clearGroup(qLabelsGroup);
+        clearGroup(airGroup); clearGroup(qArrowsGroup);
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -522,15 +519,19 @@
                 const changedY = prevY !== scanY;
                 const changedZ = prevZ !== scanZ;
                 const changedQ = prevQ !== scanQ;
+                
+                const hasMovement = changedX || changedY || changedZ;
 
-                if (isAir) {
-                    feeds.AIR.add(tempF);
-                } else if (changedX || changedY) {
-                    feeds.XY.add(tempF);
-                } else if (changedZ && !changedX && !changedY) {
-                    feeds.Z.add(tempF);
-                } else if (changedQ && !changedX && !changedY && !changedZ) {
+                if (changedQ && !hasMovement) {
                     feeds.Q.add(tempF);
+                } else if (hasMovement) {
+                    if (isAir) {
+                        feeds.AIR.add(tempF);
+                    } else if (changedX || changedY) {
+                        feeds.XY.add(tempF);
+                    } else if (changedZ && !changedX && !changedY) {
+                        feeds.Z.add(tempF);
+                    }
                 }
             }
         }
@@ -553,7 +554,7 @@
                 scene.add(grp); 
                 feedGroupsMap.set(groupKey, grp);
                 
-                const c = getColorForFeedrate(fVal, minF, maxF); 
+                const c = getColorForFeedrate(fVal, minF, maxF, category); 
                 const hexColor = '#' + c.getHexString();
                 
                 const lbl = document.createElement('label'); 
@@ -607,9 +608,6 @@
                 const origin = new THREE.Vector3(curX, curY, curZ);
                 const arrowHelper = new THREE.ArrowHelper(dir, origin, arrowLength, 0xff0055, 1.5, 0.8);
                 arrowHelper.userData = { lineIndex: i }; qArrowsGroup.add(arrowHelper);
-                const qSprite = createTextSprite(lineLabel, i, 'rgba(255, 0, 85, 0.9)');
-                qSprite.position.set(curX + Math.cos(rad) * (arrowLength + 4), curY + Math.sin(rad) * (arrowLength + 4), curZ);
-                qLabelsGroup.add(qSprite);
             }
 
             minX = Math.min(minX, curX); maxX = Math.max(maxX, curX);
@@ -621,6 +619,7 @@
             const changedY = prevY !== curY;
             const changedZ = prevZ !== curZ;
             const changedQ = prevQ !== curQ;
+            const hasMovement = changedX || changedY || changedZ;
 
             let mat, targetGroup;
 
@@ -629,14 +628,16 @@
                 targetGroup = airGroup;
             } else {
                 let category = 'XY';
-                if (isAir) category = 'AIR';
-                else if (changedX || changedY) category = 'XY';
-                else if (changedZ && !changedX && !changedY) category = 'Z';
-                else if (changedQ && !changedX && !changedY && !changedZ) category = 'Q';
+                if (changedQ && !hasMovement) category = 'Q';
+                else if (hasMovement) {
+                    if (isAir) category = 'AIR';
+                    else if (changedX || changedY) category = 'XY';
+                    else if (changedZ && !changedX && !changedY) category = 'Z';
+                }
 
                 const groupKey = `${category}_${curF}`;
                 targetGroup = feedGroupsMap.get(groupKey) || airGroup;
-                mat = new THREE.LineBasicMaterial({ color: getColorForFeedrate(curF, minF, maxF) });
+                mat = new THREE.LineBasicMaterial({ color: getColorForFeedrate(curF, minF, maxF, category) });
             }
 
             let I = 0, J = 0, centerX = 0, centerY = 0;
@@ -647,12 +648,6 @@
 
             if (prevX !== curX || prevY !== curY || prevZ !== curZ || prevQ !== curQ) {
                 if (prevX !== curX || prevY !== curY || prevZ !== curZ) {
-                    const isPureZLift = (prevX === curX && prevY === curY && curZ > prevZ);
-                    if (isPureZLift) {
-                        const sprite = createTextSprite(lineLabel, i, 'rgba(255, 170, 0, 0.9)');
-                        sprite.position.set(curX + 3, curY + 3, (prevZ + curZ) / 2); zLabelsGroup.add(sprite);
-                    }
-
                     let lineMesh;
                     if (motionMode === 'G02' || motionMode === 'G03') {
                         const startAngle = Math.atan2(prevY - centerY, prevX - centerX);
@@ -701,8 +696,6 @@
     });
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
-    document.getElementById('toggle-z-labels').addEventListener('change', (e) => zLabelsGroup.visible = e.target.checked );
-    document.getElementById('toggle-q-labels').addEventListener('change', (e) => qLabelsGroup.visible = e.target.checked );
     
     document.getElementById('file-input').addEventListener('change', (e) => {
         const file = e.target.files[0]; if (!file) return;
