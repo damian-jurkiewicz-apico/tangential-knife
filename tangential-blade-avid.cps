@@ -18,7 +18,7 @@ setCodePage("ascii");
 
 capabilities = CAPABILITY_MILLING | CAPABILITY_MACHINE_SIMULATION;
 allowHelicalMoves = false;
-tolerance = spatial(0.3, MM);
+tolerance = spatial(0.05, MM);
 
 minimumChordLength = spatial(0.25, MM);
 minimumCircularRadius = spatial(0, MM);
@@ -36,14 +36,14 @@ properties = {
       value: 0.5
   },
 
-plungeFeedrate: {
+  plungeFeedrate: {
       title: "Plunge Feedrate",
       description: "Default speed for vertical (Z) plunge moves. Set to 0 to use Tool Plunge Feedrate from Fusion 360.",
       type: "number",
       value: 400
   },  
 
-rotationFeedrate: {
+  rotationFeedrate: {
       title: "Rotation Feedrate (Q1)",
       description: "Speed for C/Q axis rotations in air.",
       type: "number",
@@ -54,13 +54,13 @@ rotationFeedrate: {
       title: "Minimum Radius", 
       description: "Absolute minimum radius allowable. Radii smaller than this will be clipped entirely with a linear move.", 
       type: "number", 
-      value:5
+      value: 5
   },
   minArcRadius: {
       title: "Minimum Arc Radius", 
       description: "Radii smaller than this will be approximated with discrete linear moves.", 
       type: "number", 
-      value:10
+      value: 10
   },
   usePostTolerance: {
       title: "Use Global Tolerance", 
@@ -142,8 +142,7 @@ function updateC(target_rad) {
   if (normalized_delta > Math.PI) normalized_delta -= 2 * Math.PI;
   if (normalized_delta < -Math.PI) normalized_delta += 2 * Math.PI;
 
-  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3,
-  // aby pochłaniać małe wahania bez wywoływania przerw w ruchu (G01 F...).
+  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3
   if (Math.abs(normalized_delta) < 1e-3) {
     c_rad += normalized_delta; 
     return;
@@ -162,7 +161,6 @@ function updateC(target_rad) {
   else { 
     c_rad += normalized_delta;
     var cStr = cOutput.format(toDeg(c_rad));
-    // Zabezpieczenie przed pisaniem pustych bloków (samo F666), które zatrzymują maszynę
     if (cStr) {
         writeBlock(gMotionModal.format(1), cStr, feedOutput.format(rotFeed));
     }
@@ -216,11 +214,10 @@ function updateCminRotation(target_rad) {
         }
         writeBlock(gAbsIncModal.format(90));
         writeBlock(gAbsIncModal.format(92), cOutput.format(toDeg(target_rad)));
-        c_rad = target_rad; // G92 resetuje współrzędne, więc tu ustawiamy na sztywno
+        c_rad = target_rad;
     } else {
         writeDebug("Inside 180 in absolute coords");
         gMotionModal.reset();
-        // Zamiana z c_rad = target_rad na płynne przejście, by uniknąć przewijania o 360 st.
         c_rad += normalized_delta;
         writeBlock(gMotionModal.format(1), cOutput.format(toDeg(c_rad)), feedOutput.format(rotFeed));
     }
@@ -230,7 +227,6 @@ function updateCminRotation(target_rad) {
   else { 
     c_rad += normalized_delta;
     var cStr = cOutput.format(toDeg(c_rad));
-    // Zapobieganie pustym blokom:
     if (cStr) {
         writeBlock(gMotionModal.format(1), cStr, feedOutput.format(rotFeed));
     }
@@ -240,10 +236,11 @@ function updateCminRotation(target_rad) {
 /**
  Move cutter up to retract height
  */
- function moveUp() {
+function moveUp() {
+   var retractZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : 15;
    retractPos = getCurrentPosition();
-   onRapid(retractPos.x,retractPos.y,getParameter("operation:retractHeight_value"));
- }
+   onRapid(retractPos.x, retractPos.y, retractZ);
+}
 
 /**
  Move cutter down to work height
@@ -254,11 +251,12 @@ function moveDown() {
   if (z) {
     gMotionModal.reset();
 
-  var pFeed = getProperty("plungeFeedrate");
-  if (!pFeed || pFeed <= 0) {
-    pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
-  }
+    var pFeed = getProperty("plungeFeedrate");
+    if (!pFeed || pFeed <= 0) {
+      pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
+    }
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
+    feedOutput.reset(); // Wymuś powrót do posuwu roboczego po zjeździe Z
   }
 }
 
@@ -267,7 +265,10 @@ function moveDown() {
 */
 function writeBlock() {
   var blockStr = formatWords(arguments);
-
+  
+  // Zapisz informację, czy oryginalnie był to ruch szybki G00
+  var isConvertedRapid = (blockStr.indexOf("G00") !== -1);
+  
   blockStr = blockStr.replace("G00", "G01");
 
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
@@ -278,7 +279,8 @@ function writeBlock() {
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(pFeed);
   }
-  else if (blockStr.indexOf("G01") !== -1 && blockStr.indexOf("F") === -1) {
+  else if (isConvertedRapid) {
+    // Wymuś posuw tylko dla ruchów szybkich zamienionych na G01
     var cFeed = (tool.feedrate > 0) ? tool.feedrate : 1500;
     blockStr += " F" + feedFormat.format(cFeed);
   }
@@ -327,7 +329,7 @@ function onSection() {
 
 function onRapid(_x, _y, _z) {
   isRapid = true;
-  pendingPlungeZ = undefined; // Wyczyść wstrzymany Plunge przy ruchu szybkim
+  pendingPlungeZ = undefined;
   var x = xOutput.format(_x);
   var y = yOutput.format(_y);
   var z = zOutput.format(_z);
@@ -369,7 +371,13 @@ function onLinear(_x, _y, _z, feed) {
       var zStr = zOutput.format(pendingPlungeZ);
       if (zStr) {
           gMotionModal.reset();
-          writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pendingPlungeFeed));
+          var pFeed = pendingPlungeFeed;
+          var customPlunge = getProperty("plungeFeedrate");
+          if (customPlunge && customPlunge > 0) {
+            pFeed = customPlunge;
+          }
+          writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pFeed));
+          feedOutput.reset(); // RESETUJE POSUW - uniemożliwia dziedziczenie F z Plunge do kolejnego odcinka XY
       }
       pendingPlungeZ = undefined;
       pendingPlungeFeed = undefined;
@@ -388,7 +396,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
 
   if (radius <= getProperty("minLinearRadius")) {
-    onLinear(x, y, x, feed);
+    onLinear(x, y, z, feed); // POPRAWIONO: Zamieniono 'x' na 'z' jako trzeci parametr
     return;
   }
   
@@ -427,7 +435,13 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
         var zStr = zOutput.format(pendingPlungeZ);
         if (zStr) {
             gMotionModal.reset();
-            writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pendingPlungeFeed));
+            var pFeed = pendingPlungeFeed;
+            var customPlunge = getProperty("plungeFeedrate");
+            if (customPlunge && customPlunge > 0) {
+              pFeed = customPlunge;
+            }
+            writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pFeed));
+            feedOutput.reset(); // RESETUJE POSUW po zrzuceniu Z
         }
         pendingPlungeZ = undefined;
         pendingPlungeFeed = undefined;
