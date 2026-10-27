@@ -13,7 +13,7 @@
         input[type="file"] { display: none; }
         .btn { display: block; width: 100%; padding: 10px; background: #0e639c; color: white; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; border: none; transition: background 0.2s; }
         .btn:hover { background: #1177bb; }
-        
+
         .view-btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
         .btn-secondary { background: #333; font-size: 12px; padding: 8px; }
         .btn-secondary:hover { background: #444; }
@@ -25,7 +25,7 @@
         .feed-color-badge { width: 10px; height: 10px; border-radius: 2px; display: inline-block; border: 1px solid #555; }
 
         textarea { width: 100%; height: 140px; background: #1e1e1e; color: #d4d4d4; border: 1px solid #3c3c3c; padding: 8px; font-family: monospace; font-size: 11px; resize: vertical; border-radius: 4px; white-space: pre; }
-        
+
         .selected-line-box {
             background: #1e1e1e;
             border: 1px solid #3c3c3c;
@@ -41,11 +41,11 @@
 
         .stats { font-size: 13px; line-height: 1.6; color: #aaa; }
         .stats span { color: #4ec9b0; font-weight: bold; }
-        
+
         #viewer-container { flex: 1; position: relative; display: flex; flex-direction: column; }
         #canvas-wrapper { flex: 1; position: relative; width: 100%; height: 100%; }
         #canvas3d { width: 100%; height: 100%; display: block; }
-        
+
         #rotation-pad { position: absolute; bottom: 20px; left: 20px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 8px; border: 1px solid #444; display: grid; grid-template-columns: repeat(3, 36px); gap: 4px; z-index: 10; }
         .pad-btn { width: 36px; height: 36px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; cursor: pointer; font-weight: bold; display: flex; align-items: center; justify-content: center; user-select: none; }
         .pad-btn:hover { background: #0e639c; }
@@ -59,16 +59,14 @@
         .range-slider-container input[type="range"] { position: absolute; width: 100%; pointer-events: auto; -webkit-appearance: none; appearance: none; height: 0; background: none; outline: none; margin: 0; }
         .range-slider-container input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #4ec9b0; cursor: pointer; border: 2px solid #fff; position: relative; z-index: 20; }
         .range-slider-container input[type="range"]::-moz-range-thumb { width: 18px; height: 18px; border-radius: 50%; background: #4ec9b0; cursor: pointer; border: 2px solid #fff; position: relative; z-index: 20; }
-        
+
         .cfg-input { background: #1e1e1e; color: #ccc; border: 1px solid #3c3c3c; border-radius: 4px; padding: 3px 6px; font-size: 12px; }
 
         #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d8a4e; color: white; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none; opacity: 0; transition: opacity 0.3s ease; z-index: 1000; }
         .toast-visible { opacity: 1 !important; }
     </style>
-    <!-- Główne biblioteki Three.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <!-- Biblioteki Line2 potrzebne do skalowania grubości linii -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineSegmentsGeometry.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineGeometry.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/lines/LineMaterial.js"></script>
@@ -151,15 +149,19 @@
             </summary>
             <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; padding: 0 5px;">
                 <div>
-                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Długość wektora (Knife): <span id="vector-length-val" style="color:#4ec9b0;">50%</span></label>
+                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Knife Vector Length: <span id="vector-length-val" style="color:#4ec9b0;">50%</span></label>
                     <input type="range" id="vector-length-slider" min="0" max="100" value="50" style="width: 100%; margin-top: 4px;">
                 </div>
                 <div>
-                    <label for="feed-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki cięcia (Feed): <span id="feed-thickness-val" style="color:#4ec9b0;">2</span></label>
+                    <label for="arrow-size-slider" style="font-size: 12px; color: #aaa;">Path Arrowhead Size: <span id="arrow-size-val" style="color:#4ec9b0;">8</span></label>
+                    <input type="range" id="arrow-size-slider" min="1" max="40" value="8" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div>
+                    <label for="feed-thickness-slider" style="font-size: 12px; color: #aaa;">Cutting Path Thickness (Feed): <span id="feed-thickness-val" style="color:#4ec9b0;">2</span></label>
                     <input type="range" id="feed-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
                 </div>
                 <div>
-                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Grubość ścieżki jałowej (Air): <span id="air-thickness-val" style="color:#4ec9b0;">2</span></label>
+                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Idle Path Thickness (Air): <span id="air-thickness-val" style="color:#4ec9b0;">2</span></label>
                     <input type="range" id="air-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
                 </div>
             </div>
@@ -170,7 +172,7 @@
 <div id="viewer-container">
     <div id="canvas-wrapper">
         <canvas id="canvas3d"></canvas>
-        
+
         <div id="rotation-pad">
             <div></div>
             <button class="pad-btn" onclick="rotateCamera(0, -15)" title="Rotate Up">▲</button>
@@ -209,7 +211,7 @@
     scene.background = new THREE.Color(0x1e1e1e);
 
     const camera = new THREE.PerspectiveCamera(45, wrapper.clientWidth / wrapper.clientHeight, 0.1, 10000);
-    camera.up.set(0, 0, 1); // Z do gory - musi byc ustawione przed utworzeniem OrbitControls
+    camera.up.set(0, 0, 1);
     let currentTarget = new THREE.Vector3(0, 0, 0);
     let defaultDistance = 300;
 
@@ -222,7 +224,7 @@
     controls.enableRotate = true;
     controls.rotateSpeed = 0.8;
     controls.minPolarAngle = 0;
-    controls.maxPolarAngle = Math.PI / 2; // nie schodzimy pod panel
+    controls.maxPolarAngle = Math.PI / 2;
     controls.enablePan = true;
     controls.enableZoom = true;
     controls.screenSpacePanning = true;
@@ -232,10 +234,16 @@
     let globalVectorLength = 50;
     let globalFeedThickness = 2;
     let globalAirThickness = 2;
-    
+    let globalArrowSize = 8;
+
     let allFeedMaterials = [];
     let allAirMaterials = [];
-    
+    let lineArrowheads = [];
+
+    const arrowheadGeometry = new THREE.ConeGeometry(0.35, 1, 12);
+    arrowheadGeometry.translate(0, -0.5, 0);
+    const arrowAxis = new THREE.Vector3(0, 1, 0);
+
     const highlightMaterial = new THREE.LineMaterial({
         color: 0xffff00,
         linewidth: 4,
@@ -258,7 +266,7 @@
         const geometry = new THREE.BoxGeometry(width, length, height);
         const material = new THREE.MeshBasicMaterial({ color: 0x3a3a3a, transparent: true, opacity: 0.4, depthWrite: false });
         panelMesh = new THREE.Mesh(geometry, material);
-        panelMesh.renderOrder = -1; // panel zawsze pod liniami, nie przyciemnia ich
+        panelMesh.renderOrder = -1;
 
         const edges = new THREE.EdgesGeometry(geometry);
         const line = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x666666 }));
@@ -273,17 +281,16 @@
     document.getElementById('panel-width').addEventListener('input', updatePanelBox);
     document.getElementById('panel-length').addEventListener('input', updatePanelBox);
 
-    let feedGroupsMap = new Map(); 
+    let feedGroupsMap = new Map();
     let airGroup = new THREE.Group();
     let qArrowsGroup = new THREE.Group();
 
     scene.add(airGroup);
     scene.add(qArrowsGroup);
 
-    // FIX: dodanie konfiguracji raycastera dla Line2
     const raycaster = new THREE.Raycaster();
     raycaster.params.Line.threshold = 4;
-    raycaster.params.Line2 = { threshold: 4 }; // Zwiększony próg detekcji kliknięć
+    raycaster.params.Line2 = { threshold: 4 };
     const mouse = new THREE.Vector2();
     let selectedGCodeText = "";
     let hoveredObject = null;
@@ -293,7 +300,7 @@
 
     const airThresholdInput = document.getElementById('air-threshold');
     function getAirThreshold() { return parseFloat(airThresholdInput.value) || 16; }
-	function isAirMove(zStart, zEnd) { return Math.max(zStart, zEnd) > getAirThreshold(); }
+    function isAirMove(zStart, zEnd) { return Math.max(zStart, zEnd) > getAirThreshold(); }
 
     airThresholdInput.addEventListener('input', () => {
         updatePanelBox();
@@ -343,12 +350,8 @@
         document.getElementById('selected-line-text').innerText = lineContent || '(Empty line)';
     }
 
-    // Zakres F liczony osobno dla każdej kategorii (AIR / XY / Z / Q),
-    // dzięki temu np. F800 vs F2000 w AIR dostaje skrajne kolory, a nie sąsiednie.
     let feedRanges = {};
 
-    // Pastelowa paleta: mniejsze nasycenie + wyższa jasność (dobrze widoczne na ciemnym tle).
-    // Wystarczy zmienić te dwie wartości, żeby ją przyciemnić / wysycić.
     const PASTEL_S = 0.65;
     const PASTEL_L = 0.68;
 
@@ -360,9 +363,7 @@
         const r = feedRanges[category];
         if (r) { minF = r.min; maxF = r.max; }
         let t = (maxF === minF) ? 0 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
-        // AIR: pastelowy żółty (52°) -> koralowa czerwień (0°), najwolniejszy = żółty, najszybszy = czerwony
         if (category === 'AIR') return hslColor(52 - t * 52, PASTEL_S, PASTEL_L);
-        // XY: miętowa zieleń (130°) -> błękit (230°)
         else if (category === 'XY') return hslColor(130 + t * 100, PASTEL_S, PASTEL_L);
         else if (category === 'Z') return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
         else return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
@@ -426,7 +427,7 @@
     });
 
     canvas.addEventListener('click', (event) => {
-        if (wasDragged) { wasDragged = false; return; } // to byl obrot kamery, nie klikniecie
+        if (wasDragged) { wasDragged = false; return; }
         updateMouseFromEvent(event);
         const intersects = raycaster.intersectObjects(getClickableObjects(), true);
         if (!intersects.length) return;
@@ -464,6 +465,14 @@
         });
     });
 
+    const arrowSizeSlider = document.getElementById('arrow-size-slider');
+    const arrowSizeVal = document.getElementById('arrow-size-val');
+    arrowSizeSlider.addEventListener('input', (e) => {
+        globalArrowSize = parseFloat(e.target.value);
+        arrowSizeVal.innerText = globalArrowSize;
+        lineArrowheads.forEach(head => head.scale.setScalar(globalArrowSize));
+    });
+
     const feedThicknessSlider = document.getElementById('feed-thickness-slider');
     const feedThicknessVal = document.getElementById('feed-thickness-val');
     feedThicknessSlider.addEventListener('input', (e) => {
@@ -483,7 +492,7 @@
     const rangeStartInput = document.getElementById('range-start');
     const rangeEndInput = document.getElementById('range-end');
     const sliderHighlight = document.getElementById('slider-highlight');
-    
+
     function updateSliderUI() {
         let minVal = parseInt(rangeStartInput.value); let maxVal = parseInt(rangeEndInput.value);
         if (minVal > maxVal) { let tmp = minVal; minVal = maxVal; maxVal = tmp; }
@@ -515,7 +524,7 @@
         camera.aspect = wrapper.clientWidth / wrapper.clientHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
-        
+
         const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
         if (highlightMaterial) highlightMaterial.resolution.copy(res);
         allFeedMaterials.forEach(mat => mat.resolution.copy(res));
@@ -528,9 +537,10 @@
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
         clearGroup(airGroup); clearGroup(qArrowsGroup);
-        
+
         allFeedMaterials = [];
         allAirMaterials = [];
+        lineArrowheads = [];
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -541,15 +551,15 @@
         rangeEndInput.min = 0; rangeEndInput.max = totalGCodeLines - 1; rangeEndInput.value = totalGCodeLines - 1;
         document.getElementById('slider-total-val').innerText = totalGCodeLines;
 
-        let minF = Infinity, maxF = -Infinity; let tempF = 1000; 
+        let minF = Infinity, maxF = -Infinity; let tempF = 1000;
         const feeds = { XY: new Set(), Z: new Set(), Q: new Set(), AIR: new Set() };
         let scanMode = 'G01';
         let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
-        
+
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim().toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
-            
+
             if (line.includes('G00') || line.includes('G0')) scanMode = 'G00';
             if (line.includes('G01') || line.includes('G1')) scanMode = 'G01';
             if (line.includes('G02') || line.includes('G2')) scanMode = 'G02';
@@ -557,7 +567,7 @@
 
             const fMatch = line.match(/F([-+]?[0-9]*\.?[0-9]+)/);
             if (fMatch) tempF = parseFloat(fMatch[1]);
-            
+
             let prevX = scanX, prevY = scanY, prevZ = scanZ, prevQ = scanQ;
 
             const xMatch = line.match(/X([-+]?[0-9]*\.?[0-9]+)/);
@@ -570,8 +580,8 @@
             if (zMatch) scanZ = parseFloat(zMatch[1]);
             if (qMatch) scanQ = parseFloat(qMatch[1]);
 
-            if (scanMode !== 'G00') { 
-                minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF); 
+            if (scanMode !== 'G00') {
+                minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF);
                 const isAir = isAirMove(prevZ, scanZ);
                 const changedX = prevX !== scanX; const changedY = prevY !== scanY;
                 const changedZ = prevZ !== scanZ; const changedQ = prevQ !== scanQ;
@@ -599,7 +609,7 @@
 
         for (const [category, feedSet] of Object.entries(feeds)) {
             if (feedSet.size === 0) continue;
-            
+
             const catLabel = document.createElement('div');
             catLabel.style.cssText = 'font-size: 12px; color: #888; margin: 8px 0 4px 0; font-weight: bold;';
             catLabel.innerText = `Feed (F) - ${category}:`;
@@ -607,17 +617,17 @@
 
             Array.from(feedSet).sort((a, b) => a - b).forEach((fVal) => {
                 const groupKey = `${category}_${fVal}`;
-                const grp = new THREE.Group(); 
-                scene.add(grp); 
+                const grp = new THREE.Group();
+                scene.add(grp);
                 feedGroupsMap.set(groupKey, grp);
-                
-                const c = getColorForFeedrate(fVal, minF, maxF, category); 
+
+                const c = getColorForFeedrate(fVal, minF, maxF, category);
                 const hexColor = '#' + c.getHexString();
-                
-                const lbl = document.createElement('label'); 
+
+                const lbl = document.createElement('label');
                 lbl.className = 'checkbox-container';
                 lbl.innerHTML = `<input type="checkbox" checked data-group="${groupKey}"> <span class="feed-color-badge" style="background:${hexColor}"></span> F${fVal}`;
-                
+
                 lbl.querySelector('input').addEventListener('change', (e) => {
                     const targetGrp = e.target.getAttribute('data-group');
                     if (feedGroupsMap.has(targetGrp)) feedGroupsMap.get(targetGrp).visible = e.target.checked;
@@ -629,18 +639,26 @@
         let curX = 0, curY = 0, curZ = 0, curQ = 0, curF = tempF;
         let motionMode = 'G01'; let pointsCount = 0; let rotations = 0;
         let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity, minZ = Infinity, maxZ = -Infinity;
-        
+
         const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
         highlightMaterial.resolution.copy(res);
-        
+
         const materialsMap = new Map();
+        const arrowMaterialsMap = new Map();
         let airG00Material = null;
+
+        function getArrowMaterial(color) {
+            const key = color.getHex();
+            if (!arrowMaterialsMap.has(key)) {
+                arrowMaterialsMap.set(key, new THREE.MeshBasicMaterial({ color: color.clone() }));
+            }
+            return arrowMaterialsMap.get(key);
+        }
 
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
 
-            const nMatch = line.match(/^N([0-9]+)/);
             if (line.includes('G00') || line.includes('G0')) motionMode = 'G00';
             if (line.includes('G01') || line.includes('G1')) motionMode = 'G01';
             if (line.includes('G02') || line.includes('G2')) motionMode = 'G02';
@@ -660,7 +678,7 @@
             if (yMatch) curY = parseFloat(yMatch[1]);
             if (zMatch) curZ = parseFloat(zMatch[1]);
             if (fMatch) curF = parseFloat(fMatch[1]);
-            
+
             if (qMatch) {
                 curQ = parseFloat(qMatch[1]); rotations++;
                 const rad = (curQ + 90) * (Math.PI / 180);
@@ -705,11 +723,11 @@
 
                 const groupKey = `${category}_${curF}`;
                 targetGroup = feedGroupsMap.get(groupKey) || airGroup;
-                
+
                 if (!materialsMap.has(groupKey)) {
                     let isAirCategory = (category === 'AIR');
-                    const lineMat = new THREE.LineMaterial({ 
-                        color: getColorForFeedrate(curF, minF, maxF, category).getHex(), 
+                    const lineMat = new THREE.LineMaterial({
+                        color: getColorForFeedrate(curF, minF, maxF, category).getHex(),
                         linewidth: isAirCategory ? globalAirThickness : globalFeedThickness,
                         resolution: res,
                         transparent: true,
@@ -733,7 +751,7 @@
                     let lineMesh;
                     const geom = new THREE.LineGeometry();
                     let hitPositions = [];
-                    
+
                     if (motionMode === 'G02' || motionMode === 'G03') {
                         const startAngle = Math.atan2(prevY - centerY, prevX - centerX);
                         let endAngle = Math.atan2(curY - centerY, curX - centerX);
@@ -745,8 +763,8 @@
                         for (let s = 0; s <= segments; s++) {
                             const alpha = s / segments; const angle = startAngle + alpha * (endAngle - startAngle);
                             positions.push(
-                                centerX + Math.cos(angle) * Math.hypot(I, J), 
-                                centerY + Math.sin(angle) * Math.hypot(I, J), 
+                                centerX + Math.cos(angle) * Math.hypot(I, J),
+                                centerY + Math.sin(angle) * Math.hypot(I, J),
                                 prevZ + alpha * (curZ - prevZ)
                             );
                         }
@@ -756,19 +774,17 @@
                         hitPositions = [prevX, prevY, prevZ, curX, curY, curZ];
                         geom.setPositions(hitPositions);
                     }
-                    
-                    // FIX: Przeliczenie obwiedni dla geometrii - konieczne dla poprawnego raycastingu Line2
+
                     geom.computeBoundingBox();
                     geom.computeBoundingSphere();
-                    
+
                     lineMesh = new THREE.Line2(geom, mat);
                     lineMesh.computeLineDistances();
-                    
+
                     lineMesh.userData = { lineIndex: i };
-                    lineMesh.renderOrder = 1; // zawsze nad panelem
+                    lineMesh.renderOrder = 1;
                     targetGroup.add(lineMesh);
 
-                    // Niewidzialna linia pomocnicza do wykrywania kliknięć.
                     const hitGeometry = new THREE.BufferGeometry();
                     hitGeometry.setAttribute('position', new THREE.Float32BufferAttribute(hitPositions, 3));
                     const hitMaterial = new THREE.LineBasicMaterial({
@@ -777,6 +793,22 @@
                     const hitLine = new THREE.Line(hitGeometry, hitMaterial);
                     hitLine.userData = { lineIndex: i, isHitProxy: true };
                     targetGroup.add(hitLine);
+
+                    const n = hitPositions.length;
+                    const endPoint = new THREE.Vector3(hitPositions[n - 3], hitPositions[n - 2], hitPositions[n - 1]);
+                    const beforeEnd = new THREE.Vector3(hitPositions[n - 6], hitPositions[n - 5], hitPositions[n - 4]);
+                    const tangent = endPoint.clone().sub(beforeEnd);
+                    if (tangent.lengthSq() > 1e-12) {
+                        tangent.normalize();
+                        const head = new THREE.Mesh(arrowheadGeometry, getArrowMaterial(mat.color));
+                        head.position.copy(endPoint);
+                        head.quaternion.setFromUnitVectors(arrowAxis, tangent);
+                        head.scale.setScalar(globalArrowSize);
+                        head.renderOrder = 2;
+                        head.userData = { lineIndex: i, isHitProxy: true };
+                        targetGroup.add(head);
+                        lineArrowheads.push(head);
+                    }
                     pointsCount++;
                 }
             }
@@ -798,14 +830,14 @@
     }
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
-    
+
     document.getElementById('file-input').addEventListener('change', (e) => {
         const file = e.target.files[0]; if (!file) return;
         const reader = new FileReader();
         reader.onload = (evt) => { textarea.value = evt.target.result; parseGCode(evt.target.result); };
         reader.readAsText(file);
     });
-    
+
     document.getElementById('parse-text-btn').addEventListener('click', () => parseGCode(textarea.value) );
     textarea.addEventListener('auxclick', (e) => { if (e.button === 1) e.preventDefault(); });
     textarea.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
