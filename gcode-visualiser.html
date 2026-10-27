@@ -365,7 +365,7 @@
         let t = (maxF === minF) ? 0 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
         if (category === 'AIR') return hslColor(52 - t * 52, PASTEL_S, PASTEL_L);
         else if (category === 'XY') return hslColor(130 + t * 100, PASTEL_S, PASTEL_L);
-        else if (category === 'Z') return new THREE.Color(0.1, 0.65 + t * 0.25, 1.0);
+        else if (category === 'Z') return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
         else return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
     }
 
@@ -716,11 +716,9 @@
                 let category = 'XY';
                 if (changedQ && !hasMovement) category = 'Q';
                 else if (hasMovement) {
-                    // Pure vertical moves stay in category Z, even above the
-                    // air threshold, so they are not merged visually with AIR paths.
-                    if (changedZ && !changedX && !changedY) category = 'Z';
-                    else if (isAir) category = 'AIR';
+                    if (isAir) category = 'AIR';
                     else if (changedX || changedY) category = 'XY';
+                    else if (changedZ && !changedX && !changedY) category = 'Z';
                 }
 
                 const groupKey = `${category}_${curF}`;
@@ -786,20 +784,6 @@
                     lineMesh.userData = { lineIndex: i };
                     lineMesh.renderOrder = 1;
                     targetGroup.add(lineMesh);
-
-                    // A small endpoint marker makes the exact Z transition visible.
-                    // Consecutive Z-only moves at the same X/Y otherwise form one
-                    // continuous vertical line and can look like a single height.
-                    if (changedZ && !changedX && !changedY) {
-                        const marker = new THREE.Mesh(
-                            new THREE.SphereGeometry(0.9, 8, 6),
-                            new THREE.MeshBasicMaterial({ color: mat.color, depthTest: true })
-                        );
-                        marker.position.set(curX, curY, curZ);
-                        marker.userData = { lineIndex: i, isZMarker: true };
-                        marker.renderOrder = 3;
-                        targetGroup.add(marker);
-                    }
 
                     const hitGeometry = new THREE.BufferGeometry();
                     hitGeometry.setAttribute('position', new THREE.Float32BufferAttribute(hitPositions, 3));
