@@ -3,13 +3,13 @@
   
   Based on work by jejmule. https://github.com/jejmule/PostProcessor
   
-  For use with TwinCAT (Q1=) and knife oriented towards +Y axis.
 */
 
-description = "Tangential Rotary Blade (TwinCAT - Z Axis Knife)";
+description = "Tangential Rotary Blade";
 vendor = "Vergano";
-vendorUrl = "kbuchka@gmail.com";
+vendorUrl = "damian.jan@vergano.ch";
 certificationLevel = 2;
+version = "1.0";
 
 longDescription = "Tangential Rotary Blade support. Modified for TwinCAT (Q1=) with knife aligned to +Z axis.";
 
