@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <template-document xmlns="http://www.hsmworks.com/namespace/hsmworks/document/template" version="1.0">
 
-  <user-name>BB-GCode-Generator</user-name>
+  <user-name>2D Contour</user-name>
 
   <user-description></user-description>
 
@@ -13,20 +13,14 @@
     <tool guid="13aaa098-3be4-49d8-91b9-b498cf9a7cc8" tool-library-version="37" type="flat end mill" unit="millimeters" version="1.5">
       <expressions>
         <expression parameterKey="tool_assemblyGaugeLength" value="4 mm"/>
-        <expression parameterKey="tool_coolant" value="'disabled'"/>
         <expression parameterKey="tool_diameter" value="0.01 mm"/>
-        <expression parameterKey="tool_feedCutting" value="1 mm/min"/>
-        <expression parameterKey="tool_feedPlunge" value="1 mm/min"/>
-        <expression parameterKey="tool_feedRamp" value="1 mmpm"/>
         <expression parameterKey="tool_fluteLength" value="1mm"/>
         <expression parameterKey="tool_live" value="false"/>
         <expression parameterKey="tool_material" value="'unspecified'"/>
         <expression parameterKey="tool_numberOfFlutes" value="1"/>
         <expression parameterKey="tool_overallLength" value="4 mm"/>
-        <expression parameterKey="tool_rampAngle" value="1 degrees"/>
         <expression parameterKey="tool_shaftDiameter" value="0.01 mm"/>
         <expression parameterKey="tool_shoulderLength" value="2 mm"/>
-        <expression parameterKey="tool_spindleSpeed" value="1 rpm"/>
       </expressions>
       <nc break-control="0" diameter-offset="1" length-offset="1" live-tool="0" manual-tool-change="0" number="1" turret="0"/>
       <coolant mode="disabled"/>
@@ -87,7 +81,7 @@
     <parameter expression="''" name="tool_productLink"/>
     <parameter expression="0.01" name="tool_diameter"/>
     <parameter expression="tool_diameter + 2*tool_fluteLength*Math.tan(tool_taperAngle)" name="tool_maximumCuttingDiameter"/>
-    <parameter expression="0.01" name="tool_tipDiameter"/>
+    <parameter expression="0.0" name="tool_tipDiameter"/>
     <parameter expression="0.0" name="tool_tipOffset"/>
     <parameter expression="0.0" name="tool_cornerRadius"/>
     <parameter expression="0.0" name="tool_taperAngle"/>
@@ -264,8 +258,8 @@
     <parameter expression="'bottom'" name="clearanceHeightFromLowest_checkModel"/>
     <parameter expression="'top'" name="clearanceHeightFromHighest_checkFixture"/>
     <parameter expression="'bottom'" name="clearanceHeightFromLowest_checkFixture"/>
-    <parameter expression="10mm" name="clearanceHeight_offset"/>
-    <parameter expression="33." name="clearanceHeight_value"/>
+    <parameter expression="0mm" name="clearanceHeight_offset"/>
+    <parameter expression="20." name="clearanceHeight_value"/>
     <parameter expression="'from stock top'" name="retractHeight_mode"/>
     <parameter expression="false" name="retractHeight_ref"/>
     <parameter expression="'top'" name="retractHeightFromHighest_checkStock"/>
@@ -274,9 +268,9 @@
     <parameter expression="'bottom'" name="retractHeightFromLowest_checkModel"/>
     <parameter expression="'top'" name="retractHeightFromHighest_checkFixture"/>
     <parameter expression="'bottom'" name="retractHeightFromLowest_checkFixture"/>
-    <parameter expression="7.00 mm" name="retractHeight_offset"/>
-    <parameter expression="23." name="retractHeight_value"/>
-    <parameter expression="'from top'" name="feedHeight_mode"/>
+    <parameter expression="4.00 mm" name="retractHeight_offset"/>
+    <parameter expression="20." name="retractHeight_value"/>
+    <parameter expression="'disabled'" name="feedHeight_mode"/>
     <parameter expression="false" name="feedHeight_ref"/>
     <parameter expression="'ignore'" name="feedHeightFromHighest_checkStock"/>
     <parameter expression="'ignore'" name="feedHeightFromLowest_checkStock"/>
@@ -285,7 +279,7 @@
     <parameter expression="'ignore'" name="feedHeightFromHighest_checkFixture"/>
     <parameter expression="'ignore'" name="feedHeightFromLowest_checkFixture"/>
     <parameter expression="5mm" name="feedHeight_offset"/>
-    <parameter expression="23." name="feedHeight_value"/>
+    <parameter expression="0.0" name="feedHeight_value"/>
     <parameter expression="'from stock top'" name="topHeight_mode"/>
     <parameter expression="false" name="topHeight_ref"/>
     <parameter expression="'top'" name="topHeightFromHighest_checkStock"/>
@@ -294,8 +288,8 @@
     <parameter expression="'ignore'" name="topHeightFromLowest_checkModel"/>
     <parameter expression="'ignore'" name="topHeightFromHighest_checkFixture"/>
     <parameter expression="'ignore'" name="topHeightFromLowest_checkFixture"/>
-    <parameter expression="2.00 mm" name="topHeight_offset"/>
-    <parameter expression="18." name="topHeight_value"/>
+    <parameter expression="4.00 mm" name="topHeight_offset"/>
+    <parameter expression="20." name="topHeight_value"/>
     <parameter expression="'from contour'" name="bottomHeight_mode"/>
     <parameter expression="false" name="bottomHeight_ref"/>
     <parameter expression="'bottom'" name="bottomHeightFromHighest_checkStock"/>
@@ -304,7 +298,7 @@
     <parameter expression="'bottom'" name="bottomHeightFromLowest_checkModel"/>
     <parameter expression="'ignore'" name="bottomHeightFromHighest_checkFixture"/>
     <parameter expression="'ignore'" name="bottomHeightFromLowest_checkFixture"/>
-    <parameter expression="0mm" name="bottomHeight_offset"/>
+    <parameter expression="0.00 mm" name="bottomHeight_offset"/>
     <parameter expression="0.0" name="bottomHeight_value"/>
     <parameter expression="0.01mm" name="tolerance"/>
     <parameter expression="tolerance * 0.5" name="contourTolerance"/>
@@ -381,10 +375,10 @@
     <parameter expression="'always'" name="highFeedrateMode"/>
     <parameter expression="1.00 mm/min" name="highFeedrate"/>
     <parameter expression="false" name="allowRapidRetract"/>
-    <parameter expression="0.001 mm" name="safeDistance"/>
+    <parameter expression="1.000e-50 mm" name="safeDistance"/>
     <parameter expression="false" name="keepToolDown"/>
     <parameter expression="50mm" name="stayDownDistance"/>
-    <parameter expression="0mm" name="liftHeight"/>
+    <parameter expression="0.00 mm" name="liftHeight"/>
     <parameter expression="false" name="doLeadIn"/>
     <parameter expression="tool_diameter * 0.1" name="entry_radius"/>
     <parameter expression="cornerMode == 'sharp with loop' ? 0.0deg : 90.0deg" name="entry_sweep"/>
