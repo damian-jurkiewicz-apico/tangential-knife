@@ -11,7 +11,7 @@ vendorUrl = "damian.jan@vergano.ch";
 certificationLevel = 2;
 version = "1.0";
 
-longDescription = "Tangential Rotary Blade support. Modified for TwinCAT (Q1=) with knife aligned to +Z axis.";
+longDescription = "Tangential Rotary Blade support. Modified for TwinCAT (Q1=) with knife aligned to +Z axis. UWAGA: Wszystkie parametry sterowane są z menu tego posta. Opcje w zakładce 'Built-in' (Wbudowane) powinny zostać zignorowane.";
 
 extension = "nc";
 setCodePage("ascii");
@@ -29,68 +29,75 @@ allowedCircularPlanes = 1 << PLANE_XY;
 
 // user-defined properties
 properties = {
-  liftAtCorner: {
-      title: "Lift Angle", 
-      description: "Maximum angle at which the blade is turned in the material. If the angle is larger the blade is lifted and rotated.", 
-      type: "angle", 
-      value: 0.5
+  ignoreBuiltIn: {
+      title: "--- UWAGA ---",
+      description: "Zignoruj zakładkę 'Built-in' (Wbudowane). Wszystkie parametry używają poniższych ustawień.",
+      type: "string",
+      value: "IGNORUJ BUILT-IN",
+      group: "Prędkości i posuwy"
   },
-
+  cuttingFeedrate: {
+      title: "Prędkość cięcia",
+      description: "Główny posuw roboczy dla ruchów w osiach XY po wycinanym konturze.",
+      type: "number",
+      value: 1000,
+      group: "Prędkości i posuwy"
+  },
   plungeFeedrate: {
-      title: "Plunge Feedrate",
-      description: "Default speed for vertical (Z) plunge moves. Set to 0 to use Tool Plunge Feedrate from Fusion 360.",
+      title: "Prędkość zagłębiania",
+      description: "Posuw dla opuszczania i wbijania noża w osi Z.",
       type: "number",
-      value: 400
-  },  
-
+      value: 400,
+      group: "Prędkości i posuwy"
+  },
   rotationFeedrate: {
-      title: "Rotation Feedrate (Q1)",
-      description: "Speed for C/Q axis rotations in air.",
+      title: "Prędkość obrotu",
+      description: "Prędkość obrotu samej osi Q1 w powietrzu nad narożnikiem.",
       type: "number",
-      value: 666
+      value: 666,
+      group: "Prędkości i posuwy"
   },
-
-  minLinearRadius: {
-      title: "Minimum Radius", 
-      description: "Absolute minimum radius allowable. Radii smaller than this will be clipped entirely with a linear move.", 
-      type: "number", 
-      value: 5
-  },
-  minArcRadius: {
-      title: "Minimum Arc Radius", 
-      description: "Radii smaller than this will be approximated with discrete linear moves.", 
-      type: "number", 
-      value: 10
-  },
-  usePostTolerance: {
-      title: "Use Global Tolerance", 
-      description: "Override operation-specific tolerances for linearizations.", 
-      type: "boolean", 
-      value: true
-  },
-  forceRapids: {
-      title: "Force Rapid Moves", 
-      description: "Un-nerf the free version of Fusion by trying to force G0 rapid moves instead of G1 rapid moves. USE AT YOUR OWN RISK.", 
-      type: "boolean", 
-      value: true
+  highFeedrate: {
+      title: "Prędkość przejazdów jałowych",
+      description: "Posuw dla szybkich ruchów w powietrzu między konturami.",
+      type: "number",
+      value: 3000,
+      group: "Prędkości i posuwy"
   },
   useCalcAngularFeed: {
-      title: "Use calculated angular feed",
-      description: "Enabling this will compute an angular feedrate for G02/03 moves that is equivalent to the specified linear feedrate.",
+      title: "Posuw kątowy",
+      description: "Przełącznik przeliczania posuwu kątowego dla łuków.",
       type: "boolean",
-      value: false
+      value: false,
+      group: "Prędkości i posuwy"
+  },
+  liftAtCorner: {
+      title: "Kąt uniesienia",
+      description: "Granica kątowa, powyżej której nóż unosi się i obraca.",
+      type: "angle",
+      value: 0.5,
+      group: "Geometria i praca nożem"
   },
   reduceRotations: {
-      title: "Reduce Rotations",
-      description: "Enable this to minimize superfluous C-axis rotations.",
+      title: "Optymalizacja obrotów",
+      description: "Algorytm zapobiegający zbędnym obrotom osi Q1.",
       type: "boolean",
-      value: true
+      value: true,
+      group: "Geometria i praca nożem"
   },
-  printDebug: {
-      title: "Print Debug Strings",
-      description: "Enable this to print additional debug information.",
-      type: "boolean",
-      value: false
+  minArcRadius: {
+      title: "Minimalny promień łuku",
+      description: "Granica zamiany łuków na proste.",
+      type: "number",
+      value: 10,
+      group: "Geometria i praca nożem"
+  },
+  minLinearRadius: {
+      title: "Bezwzględny promień minimalny",
+      description: "Promień zastępowany jednym ruchem prostym.",
+      type: "number",
+      value: 5,
+      group: "Geometria i praca nożem"
   }
 };
 
@@ -129,7 +136,6 @@ var isRapid = false;
 
 // Zmienne do buforowania nurkowania (Plunge)
 var pendingPlungeZ = undefined;
-var pendingPlungeFeed = undefined;
 
 /**
  Update C position for Tangential Rotary Blade
@@ -142,7 +148,7 @@ function updateC(target_rad) {
   if (normalized_delta > Math.PI) normalized_delta -= 2 * Math.PI;
   if (normalized_delta < -Math.PI) normalized_delta += 2 * Math.PI;
 
-  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3
+  // Filtr błędu precyzji float.
   if (Math.abs(normalized_delta) < 1e-3) {
     c_rad += normalized_delta; 
     return;
@@ -178,7 +184,7 @@ function updateCminRotation(target_rad) {
   if (normalized_delta > Math.PI) normalized_delta -= 2 * Math.PI;
   if (normalized_delta < -Math.PI) normalized_delta += 2 * Math.PI;
 
-  // Filtr błędu precyzji float. Zwiększono tolerancję z 1e-5 na 1e-3.
+  // Filtr błędu precyzji float.
   if (Math.abs(normalized_delta) < 1e-3) {
     c_rad += normalized_delta; 
     return;
@@ -192,31 +198,23 @@ function updateCminRotation(target_rad) {
 
     var currentNormalized = Math.abs(((c_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
     var targetNormalized = Math.abs(((target_rad % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI));
-    
     var deltaNormalized = targetNormalized - currentNormalized;
-    
-    writeDebug("Curr: " + toDeg(c_rad) + " Targ: " + toDeg(target_rad));
-    writeDebug("CurrNorm: " + toDeg(currentNormalized) + " TargNorm: " + toDeg(targetNormalized));
     
     if (Math.abs(delta_rad) > Math.PI) {
         if (Math.abs(deltaNormalized) > Math.PI) {
             gAbsIncModal.reset();
             if (currentNormalized < targetNormalized) {
-                writeDebug("Zero cross, current nearer 0");
                 writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(-(currentNormalized + (2 * Math.PI - targetNormalized)))), feedOutput.format(rotFeed));
             } else {
-                writeDebug("Zero cross, target nearer 0");
                 writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg((targetNormalized + (2 * Math.PI - currentNormalized)))), feedOutput.format(rotFeed));
             }
         } else {
-            writeDebug("Inside 180 in normalized coords");
             writeBlock(gAbsIncModal.format(91), cOutput.format(toDeg(deltaNormalized)), feedOutput.format(rotFeed));
         }
         writeBlock(gAbsIncModal.format(90));
         writeBlock(gAbsIncModal.format(92), cOutput.format(toDeg(target_rad)));
         c_rad = target_rad;
     } else {
-        writeDebug("Inside 180 in absolute coords");
         gMotionModal.reset();
         c_rad += normalized_delta;
         writeBlock(gMotionModal.format(1), cOutput.format(toDeg(c_rad)), feedOutput.format(rotFeed));
@@ -250,11 +248,7 @@ function moveDown() {
   var z = zOutput.format(plungePos.z); 
   if (z) {
     gMotionModal.reset();
-
     var pFeed = getProperty("plungeFeedrate");
-    if (!pFeed || pFeed <= 0) {
-      pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
-    }
     writeBlock(gMotionModal.format(1), z, feedOutput.format(pFeed));
     feedOutput.reset(); // Wymuś powrót do posuwu roboczego po zjeździe Z
   }
@@ -269,19 +263,19 @@ function writeBlock() {
   // Zapisz informację, czy oryginalnie był to ruch szybki G00
   var isConvertedRapid = (blockStr.indexOf("G00") !== -1);
   
+  // Konwersja wszystkich G00 na G01
   blockStr = blockStr.replace("G00", "G01");
 
+  // Jeżeli to ruch tylko w osi Z (nurkowanie/podnoszenie) wewnątrz writeBlock
   if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
     var pFeed = getProperty("plungeFeedrate");
-    if (!pFeed || pFeed <= 0) {
-      pFeed = (tool.plungeFeedrate > 0) ? tool.plungeFeedrate : 400;
-    }
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(pFeed);
   }
+  // Jeżeli to przekonwertowany ruch szybki (powietrze XY lub XYZ)
   else if (isConvertedRapid) {
-    // Wymuś posuw tylko dla ruchów szybkich zamienionych na G01
-    var cFeed = (tool.feedrate > 0) ? tool.feedrate : 1500;
+    var cFeed = getProperty("highFeedrate");
+    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(cFeed);
   }
 
@@ -292,12 +286,6 @@ function writeBlock() {
 
 function writeComment(text) {
   writeln("(" + text + ")");
-}
-
-function writeDebug(text) {
-    if (getProperty("printDebug")) {
-        writeComment(text);
-    }
 }
 
 function onOpen() {
@@ -335,11 +323,12 @@ function onRapid(_x, _y, _z) {
   var z = zOutput.format(_z);
   
   if (x || y || z) {
-    writeBlock(gMotionModal.format(0), x, y, z);
+    writeBlock(gMotionModal.format(0), x, y, z); // writeBlock samodzielnie zamieni G00 na G01 z highFeedrate
     feedOutput.reset();
   }
 }
 
+// Zignorowano zmienną `feed` z Fusion 360
 function onLinear(_x, _y, _z, feed) {
   var start = getCurrentPosition();
   var target = new Vector(_x,_y,_z);
@@ -347,7 +336,6 @@ function onLinear(_x, _y, _z, feed) {
   // ZAMROŻENIE OSI Z: Wyłapujemy czyste nurkowanie i je wstrzymujemy
   if (start.x == _x && start.y == _y && _z < start.z) {
       pendingPlungeZ = _z;
-      pendingPlungeFeed = feed;
       return; 
   }
   
@@ -371,16 +359,10 @@ function onLinear(_x, _y, _z, feed) {
       var zStr = zOutput.format(pendingPlungeZ);
       if (zStr) {
           gMotionModal.reset();
-          var pFeed = pendingPlungeFeed;
-          var customPlunge = getProperty("plungeFeedrate");
-          if (customPlunge && customPlunge > 0) {
-            pFeed = customPlunge;
-          }
-          writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pFeed));
-          feedOutput.reset(); // RESETUJE POSUW - uniemożliwia dziedziczenie F z Plunge do kolejnego odcinka XY
+          writeBlock(gMotionModal.format(1), zStr, feedOutput.format(getProperty("plungeFeedrate")));
+          feedOutput.reset(); 
       }
       pendingPlungeZ = undefined;
-      pendingPlungeFeed = undefined;
   }
   
   var x = xOutput.format(_x);
@@ -388,21 +370,25 @@ function onLinear(_x, _y, _z, feed) {
   var z = zOutput.format(_z); 
 
   if (x || y || z) {
-    writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(feed));
+    // Określenie posuwu: ruchy jałowe dostają highFeedrate, praca w materiale dostaje cuttingFeedrate
+    var activeFeed = isTravel ? getProperty("highFeedrate") : getProperty("cuttingFeedrate");
+    writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(activeFeed));
   }
 }
 
+// Zignorowano zmienną `feed` z Fusion 360
 function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
 
+  // Łuki poniżej tolerancji traktowane jak ruch liniowy (nie podajemy tu feeda, onLinear sam przypisze posuw)
   if (radius <= getProperty("minLinearRadius")) {
-    onLinear(x, y, z, feed); // POPRAWIONO: Zamieniono 'x' na 'z' jako trzeci parametr
+    onLinear(x, y, z, 0); 
     return;
   }
   
   if (radius <= getProperty("minArcRadius")) {
     var t = tolerance;
-    if (hasParameter("operation:tolerance") && !getProperty("usePostTolerance")) {
+    if (hasParameter("operation:tolerance")) {
       t = getParameter("operation:tolerance");
     }
     linearize(t);
@@ -435,16 +421,10 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
         var zStr = zOutput.format(pendingPlungeZ);
         if (zStr) {
             gMotionModal.reset();
-            var pFeed = pendingPlungeFeed;
-            var customPlunge = getProperty("plungeFeedrate");
-            if (customPlunge && customPlunge > 0) {
-              pFeed = customPlunge;
-            }
-            writeBlock(gMotionModal.format(1), zStr, feedOutput.format(pFeed));
-            feedOutput.reset(); // RESETUJE POSUW po zrzuceniu Z
+            writeBlock(gMotionModal.format(1), zStr, feedOutput.format(getProperty("plungeFeedrate")));
+            feedOutput.reset(); 
         }
         pendingPlungeZ = undefined;
-        pendingPlungeFeed = undefined;
     }
 
     if(clockwise){
@@ -454,9 +434,10 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       c_rad += arcAngle;
     }
     
-    var outputFeed = feed;
+    // Wymuszenie własnego posuwu w materiale dla łuku
+    var outputFeed = getProperty("cuttingFeedrate");
     if (getProperty("useCalcAngularFeed")) {
-        outputFeed = calcAngularFeed(arcLength, arcAngle, feed);
+        outputFeed = calcAngularFeed(arcLength, arcAngle, outputFeed);
     }
     
     feedOutput.reset(); 
