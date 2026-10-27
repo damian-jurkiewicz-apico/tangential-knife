@@ -6,12 +6,12 @@
   For use with TwinCAT (Q1=) and knife oriented towards +Y axis.
 */
 
-description = "Tangential Rotary Blade (TwinCAT - Y Axis Knife)";
-vendor = "KBuchka";
+description = "Tangential Rotary Blade (TwinCAT - Z Axis Knife)";
+vendor = "Vergano";
 vendorUrl = "kbuchka@gmail.com";
 certificationLevel = 2;
 
-longDescription = "Tangential Rotary Blade support based on Jejmule's post. Modified for TwinCAT (Q1=) with knife aligned to +Y axis.";
+longDescription = "Tangential Rotary Blade support. Modified for TwinCAT (Q1=) with knife aligned to +Z axis.";
 
 extension = "nc";
 setCodePage("ascii");
