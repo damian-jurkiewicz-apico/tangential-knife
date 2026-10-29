@@ -21,11 +21,18 @@ maximumCircularSweep = toRad(180);
 allowedCircularPlanes = 1 << PLANE_XY;
 
 properties = {
-  cuttingFeedrate: {
-      title: "Cutting feedrate",
-      description: "Main working feedrate for XY axis movements along the cut contour.",
+  speedAtBottom: {
+      title: "Speed at Bottom",
+      description: "Cutting feedrate when only the tip of the blade is in the material.",
       type: "number",
       value: 1000,
+      group: "Feeds and Speeds"
+  },
+  speedAtTop: {
+      title: "Speed at Top",
+      description: "Cutting feedrate when the blade is fully engaged in the material.",
+      type: "number",
+      value: 200,
       group: "Feeds and Speeds"
   },
   plungeFeedrate: {
@@ -55,6 +62,27 @@ properties = {
       type: "number",
       value: 3000,
       group: "Feeds and Speeds"
+  },
+  knifeHeight: {
+      title: "Knife Height",
+      description: "Total height of the cutting blade (mm).",
+      type: "number",
+      value: 25,
+      group: "Knife Dimensions"
+  },
+  knifeWidthTop: {
+      title: "Knife Width Max (Top)",
+      description: "Width of the blade at its base (info only).",
+      type: "number",
+      value: 6,
+      group: "Knife Dimensions"
+  },
+  knifeWidthBottom: {
+      title: "Knife Width Min (Bottom)",
+      description: "Width of the blade at the tip (info only).",
+      type: "number",
+      value: 1,
+      group: "Knife Dimensions"
   },
   liftAtCorner: {
       title: "Corner lift angle",
@@ -111,6 +139,30 @@ var isRapid = false;
 
 var pendingPlungeZ = undefined;
 var lastOutputZ = undefined; // Zmienna śledząca wysokość Z do rozróżniania Plunge / Lift
+
+var currentStockTop = 0; 
+
+function calculateDynamicFeed(currentZ) {
+  var engagement = currentStockTop - currentZ;
+
+  if (engagement <= 0) {
+    return getProperty("speedAtBottom");
+  }
+
+  var kHeight = getProperty("knifeHeight");
+  if (engagement > kHeight) {
+    engagement = kHeight;
+  }
+
+  var sBottom = getProperty("speedAtBottom");
+  var sTop = getProperty("speedAtTop");
+
+  var ratio = engagement / kHeight;
+  var dynamicFeed = sBottom - ((sBottom - sTop) * ratio);
+
+  return Math.round(dynamicFeed * 100) / 100;
+}
+
 
 function updateC(target_rad) {
   var delta_rad = (target_rad - c_rad);
@@ -226,6 +278,14 @@ function onSection() {
     warningOnce(localize("Coolant not supported."), WARNING_COOLANT);
   }
 
+  if (hasParameter("stock-upper-z")) {
+    currentStockTop = getParameter("stock-upper-z");
+  } else if (hasParameter("part-upper-z")) {
+    currentStockTop = getParameter("part-upper-z");
+  } else {
+    currentStockTop = currentSection.getGlobalZRange().getMaximum();
+  }
+
   c_rad = KNIFE_OFFSET_RAD;
   feedOutput.reset();
 }
@@ -277,7 +337,7 @@ function onLinear(_x, _y, _z, feed) {
   var z = zOutput.format(_z); 
 
   if (x || y || z) {
-    var activeFeed = isTravel ? getProperty("highFeedrate") : getProperty("cuttingFeedrate");
+    var activeFeed = isTravel ? getProperty("highFeedrate") : calculateDynamicFeed(_z);
     writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(activeFeed));
   }
 }
@@ -333,7 +393,8 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       c_rad += arcAngle;
     }
     
-    var outputFeed = getProperty("cuttingFeedrate");
+    // --- Tutaj wchodzi dynamiczny posuw ---
+    var outputFeed = calculateDynamicFeed(z);
     
     feedOutput.reset(); 
     writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
