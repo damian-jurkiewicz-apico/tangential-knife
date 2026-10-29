@@ -51,6 +51,31 @@ properties = {
       group: "General Speeds"
   },
 
+  // --- ARC LINEARIZATION RANGE ---
+  enableArcLinearization: {
+      title: "Enable Arc Linearization Range",
+      description: "If enabled, arcs within the min/max radius range will be converted into linear segments.",
+      type: "boolean",
+      value: true,
+      group: "Arc Linearization Range"
+  },
+  minArcRadiusRange: {
+      title: "Minimum Radius for Linearization",
+      description: "Linearize arcs with radius equal or larger than this value.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1.0, MM),
+      group: "Arc Linearization Range"
+  },
+  maxArcRadiusRange: {
+      title: "Maximum Radius for Linearization",
+      description: "Linearize arcs with radius equal or smaller than this value.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(5.0, MM),
+      group: "Arc Linearization Range"
+  },
+
   // --- OPERATION AT TOP ---
   speedAtTop: {
       title: "Feed at Top [mm/min]",
@@ -65,14 +90,6 @@ properties = {
       type: "angle",
       scope: "post",
       value: 60,
-      group: "Operation at Top"
-  },
-  minArcRadiusTop: {
-      title: "Minimum Non-Linearized Radius",
-      description: "Radii smaller than this threshold will be converted into segments. Set 0 to disable.",
-      type: "spatial",
-      scope: "post",
-      value: toPreciseUnit(1.0, MM),
       group: "Operation at Top"
   },
   minLinearRadiusTop: {
@@ -98,14 +115,6 @@ properties = {
       type: "angle",
       scope: "post",
       value: 30,
-      group: "Operation at Bottom"
-  },
-  minArcRadiusBottom: {
-      title: "Minimum Non-Linearized Radius",
-      description: "Radii smaller than this threshold will be converted into segments. Set 0 to disable.",
-      type: "spatial",
-      scope: "post",
-      value: toPreciseUnit(1, MM),
       group: "Operation at Bottom"
   },
   minLinearRadiusBottom: {
@@ -183,19 +192,16 @@ var initialSafeZDone = false;
 function getDynamicParameter(currentZ, topValue, bottomValue) {
   var engagement = currentStockTop - currentZ;
 
-  // Jesli zaaglebienie jest rowne 0 (lub jestesmy ponad z materialem), uzywamy wlasciwosci TOP
   if (engagement <= 0) {
     return topValue;
   }
 
   var kHeight = getProperty("knifeHeight");
-  // Jesli zagłębienie przekracza wysokosc noza, uzywamy wlasciwosci BOTTOM
   if (engagement > kHeight) {
     engagement = kHeight;
   }
 
   var ratio = engagement / kHeight;
-  // Interpolacja liniowa: startujemy od wartosci TOP i zblizamy sie do BOTTOM
   return topValue + ((bottomValue - topValue) * ratio);
 }
 
@@ -324,10 +330,8 @@ function onSection() {
     currentStockTop = currentSection.getGlobalZRange().getMaximum();
   }
 
-  // Na poczatku pierwszej sekcji ustaw Z na wysokosc bezpieczna.
-  // Uzywamy tej samej wysokosci co moveUp(); domyslnie Z15.
   if (!initialSafeZDone) {
-  var initialSafeZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : getProperty("knifeHeight");
+    var initialSafeZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : getProperty("knifeHeight");
     var initialSafeZWord = zOutput.format(initialSafeZ);
     if (initialSafeZWord) {
       writeln("N" + sequenceNumber + " G01 " + initialSafeZWord + " F" + feedFormat.format(getProperty("liftFeedrate")));
@@ -400,22 +404,29 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
   var activeZ = (pendingPlungeZ !== undefined) ? pendingPlungeZ : z;
 
+  // 1. Sprawdzenie Absolute Minimum Radius (fizyczna granica noża)
   var dynamicMinLinearRadius = getDynamicParameter(activeZ, getProperty("minLinearRadiusTop"), getProperty("minLinearRadiusBottom"));
   if (radius <= dynamicMinLinearRadius) {
     onLinear(x, y, z, 0); 
     return;
   }
   
-  var dynamicMinArcRadius = getDynamicParameter(activeZ, getProperty("minArcRadiusTop"), getProperty("minArcRadiusBottom"));
-  if (radius <= dynamicMinArcRadius) {
-    var t = tolerance;
-    if (hasParameter("operation:tolerance")) {
-      t = getParameter("operation:tolerance");
+  // 2. Linearyzacja w zadanym przedziale promieni (np. dla elips / splajnów)
+  if (getProperty("enableArcLinearization")) {
+    var minR = getProperty("minArcRadiusRange");
+    var maxR = getProperty("maxArcRadiusRange");
+    
+    if (radius >= minR && radius <= maxR) {
+      var t = tolerance;
+      if (hasParameter("operation:tolerance")) {
+        t = getParameter("operation:tolerance");
+      }
+      linearize(t);
+      return;
     }
-    linearize(t);
-    return;
   }
 
+  // 3. Natywna interpolacja G2/G3 dla reszty łuków
   switch (getCircularPlane()) {
   case PLANE_XY:
     var arcLength = getCircularArcLength();
