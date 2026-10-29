@@ -92,6 +92,14 @@ properties = {
       value: 60,
       group: "Operation at Top"
   },
+  minLinearRadiusTop: {
+      title: "Absolute Minimum Radius",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1.0, MM),
+      group: "Operation at Top"
+  },
 
   // --- OPERATION AT BOTTOM ---
   speedAtBottom: {
@@ -107,6 +115,14 @@ properties = {
       type: "angle",
       scope: "post",
       value: 30,
+      group: "Operation at Bottom"
+  },
+  minLinearRadiusBottom: {
+      title: "Absolute Minimum Radius",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(6.0, MM),
       group: "Operation at Bottom"
   },
 
@@ -387,8 +403,15 @@ function onLinear(_x, _y, _z, feed) {
 function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
   var activeZ = (pendingPlungeZ !== undefined) ? pendingPlungeZ : z;
+
+  // 1. Sprawdzenie Absolute Minimum Radius (fizyczna granica noża)
+  var dynamicMinLinearRadius = getDynamicParameter(activeZ, getProperty("minLinearRadiusTop"), getProperty("minLinearRadiusBottom"));
+  if (radius <= dynamicMinLinearRadius) {
+    onLinear(x, y, z, 0); 
+    return;
+  }
   
-  // 1. Linearyzacja w zadanym przedziale promieni (np. dla elips / splajnów)
+  // 2. Linearyzacja w zadanym przedziale promieni (np. dla elips / splajnów)
   if (getProperty("enableArcLinearization")) {
     var minR = getProperty("minArcRadiusRange");
     var maxR = getProperty("maxArcRadiusRange");
@@ -403,7 +426,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     }
   }
 
-  // 2. Natywna interpolacja G2/G3 dla reszty łuków
+  // 3. Natywna interpolacja G2/G3 dla reszty łuków
   switch (getCircularPlane()) {
   case PLANE_XY:
     var arcLength = getCircularArcLength();
