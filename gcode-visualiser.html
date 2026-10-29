@@ -352,21 +352,12 @@
 
     let feedRanges = {};
 
-    const PASTEL_S = 0.65;
-    const PASTEL_L = 0.68;
-
-    function hslColor(hueDeg, s, l) {
-        return new THREE.Color().setHSL(hueDeg / 360, s, l);
-    }
-
-    function getColorForFeedrate(f, minF, maxF, category) {
-        const r = feedRanges[category];
-        if (r) { minF = r.min; maxF = r.max; }
-        let t = (maxF === minF) ? 0 : Math.max(0, Math.min(1, (f - minF) / (maxF - minF)));
-        if (category === 'AIR') return hslColor(52 - t * 52, PASTEL_S, PASTEL_L);
-        else if (category === 'XY') return hslColor(130 + t * 100, PASTEL_S, PASTEL_L);
-        else if (category === 'Z') return new THREE.Color(0.0, 0.4 + t * 0.4, 0.6 + t * 0.4);
-        else return new THREE.Color(0.6 + t * 0.4, 0.0, 0.6 + t * 0.4);
+    function getColorForCategory(category) {
+        if (category === 'PLUNGE') return new THREE.Color(0xff3333); // Czerwony
+        if (category === 'LIFT') return new THREE.Color(0x33ff33);   // Zielony
+        if (category === 'AIR') return new THREE.Color(0xffa500);    // Pomarańczowy
+        if (category === 'FEED_XY') return new THREE.Color(0x3399ff); // Niebieski
+        return new THREE.Color(0xaa33aa);
     }
 
     function getClickableObjects() {
@@ -552,7 +543,9 @@
         document.getElementById('slider-total-val').innerText = totalGCodeLines;
 
         let minF = Infinity, maxF = -Infinity; let tempF = 1000;
-        const feeds = { XY: new Set(), Z: new Set(), Q: new Set(), AIR: new Set() };
+        
+        // Zaktualizowane kategorie
+        const feeds = { FEED_XY: new Set(), PLUNGE: new Set(), LIFT: new Set(), AIR: new Set(), Q: new Set() };
         let scanMode = 'G01';
         let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
 
@@ -589,20 +582,14 @@
 
                 if (changedQ && !hasMovement) feeds.Q.add(tempF);
                 else if (hasMovement) {
-                    if (isAir) feeds.AIR.add(tempF);
-                    else if (changedX || changedY) feeds.XY.add(tempF);
-                    else if (changedZ && !changedX && !changedY) feeds.Z.add(tempF);
+                    if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(tempF);
+                    else if (changedZ && scanZ > prevZ) feeds.LIFT.add(tempF);
+                    else if (isAir) feeds.AIR.add(tempF);
+                    else feeds.FEED_XY.add(tempF);
                 }
             }
         }
-        if (minF === Infinity) { minF = 0; maxF = 1000; feeds.XY.add(1000); }
-
-        feedRanges = {};
-        for (const [cat, set] of Object.entries(feeds)) {
-            if (set.size === 0) continue;
-            const arr = Array.from(set);
-            feedRanges[cat] = { min: Math.min(...arr), max: Math.max(...arr) };
-        }
+        if (minF === Infinity) { minF = 0; maxF = 1000; feeds.FEED_XY.add(1000); }
 
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '';
@@ -612,7 +599,7 @@
 
             const catLabel = document.createElement('div');
             catLabel.style.cssText = 'font-size: 12px; color: #888; margin: 8px 0 4px 0; font-weight: bold;';
-            catLabel.innerText = `Feed (F) - ${category}:`;
+            catLabel.innerText = `Move Type - ${category}:`;
             feedContainer.appendChild(catLabel);
 
             Array.from(feedSet).sort((a, b) => a - b).forEach((fVal) => {
@@ -621,7 +608,7 @@
                 scene.add(grp);
                 feedGroupsMap.set(groupKey, grp);
 
-                const c = getColorForFeedrate(fVal, minF, maxF, category);
+                const c = getColorForCategory(category);
                 const hexColor = '#' + c.getHexString();
 
                 const lbl = document.createElement('label');
@@ -645,7 +632,6 @@
 
         const materialsMap = new Map();
         const arrowMaterialsMap = new Map();
-        let airG00Material = null;
 
         function getArrowMaterial(color) {
             const key = color.getHex();
@@ -699,46 +685,39 @@
 
             let mat, targetGroup;
 
-            if (motionMode === 'G00') {
-                targetGroup = airGroup;
-                if (!airG00Material) {
-                    airG00Material = new THREE.LineMaterial({
-                        color: 0xffaa00,
-                        linewidth: globalAirThickness,
-                        resolution: res,
-                        transparent: true,
-                        opacity: 1
-                    });
-                    allAirMaterials.push(airG00Material);
-                }
-                mat = airG00Material;
-            } else {
-                let category = 'XY';
-                if (changedQ && !hasMovement) category = 'Q';
-                else if (hasMovement) {
-                    if (isAir) category = 'AIR';
-                    else if (changedX || changedY) category = 'XY';
-                    else if (changedZ && !changedX && !changedY) category = 'Z';
-                }
-
-                const groupKey = `${category}_${curF}`;
-                targetGroup = feedGroupsMap.get(groupKey) || airGroup;
-
-                if (!materialsMap.has(groupKey)) {
-                    let isAirCategory = (category === 'AIR');
-                    const lineMat = new THREE.LineMaterial({
-                        color: getColorForFeedrate(curF, minF, maxF, category).getHex(),
-                        linewidth: isAirCategory ? globalAirThickness : globalFeedThickness,
-                        resolution: res,
-                        transparent: true,
-                        opacity: 1
-                    });
-                    materialsMap.set(groupKey, lineMat);
-                    if (isAirCategory) allAirMaterials.push(lineMat);
-                    else allFeedMaterials.push(lineMat);
-                }
-                mat = materialsMap.get(groupKey);
+            let category = 'FEED_XY';
+            if (changedQ && !hasMovement) {
+                category = 'Q';
+            } else if (hasMovement) {
+                if (changedZ && curZ < prevZ) category = 'PLUNGE';
+                else if (changedZ && curZ > prevZ) category = 'LIFT';
+                else if (isAir || motionMode === 'G00') category = 'AIR';
+                else category = 'FEED_XY';
             }
+
+            const groupKey = `${category}_${curF}`;
+            
+            // Jesli przesuwa tylko w 'Q' lub puste, to wrzucamy do glownej airGroup
+            if (category === 'Q' || !hasMovement) {
+                targetGroup = airGroup;
+            } else {
+                targetGroup = feedGroupsMap.get(groupKey) || airGroup;
+            }
+
+            if (!materialsMap.has(groupKey)) {
+                let isAirCategory = (category === 'AIR' || category === 'LIFT');
+                const lineMat = new THREE.LineMaterial({
+                    color: getColorForCategory(category).getHex(),
+                    linewidth: isAirCategory ? globalAirThickness : globalFeedThickness,
+                    resolution: res,
+                    transparent: true,
+                    opacity: 1
+                });
+                materialsMap.set(groupKey, lineMat);
+                if (isAirCategory) allAirMaterials.push(lineMat);
+                else allFeedMaterials.push(lineMat);
+            }
+            mat = materialsMap.get(groupKey);
 
             let I = 0, J = 0, centerX = 0, centerY = 0;
             if (motionMode === 'G02' || motionMode === 'G03') {
