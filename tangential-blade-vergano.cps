@@ -35,6 +35,13 @@ properties = {
       value: 400,
       group: "Feeds and Speeds"
   },
+  liftFeedrate: {
+      title: "Lift feedrate",
+      description: "Feedrate for lifting and retracting the blade in the Z axis.",
+      type: "number",
+      value: 1000,
+      group: "Feeds and Speeds"
+  },
   rotationFeedrate: {
       title: "Rotation feedrate",
       description: "Rotation speed of the Q1 axis alone in the air above a corner.",
@@ -103,6 +110,7 @@ var c_rad = KNIFE_OFFSET_RAD;
 var isRapid = false;
 
 var pendingPlungeZ = undefined;
+var lastOutputZ = undefined; // Zmienna śledząca wysokość Z do rozróżniania Plunge / Lift
 
 function updateC(target_rad) {
   var delta_rad = (target_rad - c_rad);
@@ -159,15 +167,31 @@ function writeBlock() {
   
   blockStr = blockStr.replace("G00", "G01");
 
-  if (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1) {
-    var pFeed = getProperty("plungeFeedrate");
-    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
-    blockStr += " F" + feedFormat.format(pFeed);
+  // Sprawdzamy czy ruch odbywa się wyłącznie w osi Z
+  var isZOnly = (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1);
+  var targetZMatch = blockStr.match(/Z([+-]?[0-9.]+)/);
+  var targetZ = targetZMatch ? parseFloat(targetZMatch[1]) : undefined;
+
+  if (isZOnly) {
+    var zFeed = getProperty("plungeFeedrate"); // Domyślnie Plunge
+    
+    // Jeśli znamy poprzednie Z i nowe Z jest wyższe - jest to ruch podnoszenia (Lift)
+    if (lastOutputZ !== undefined && targetZ !== undefined && targetZ > lastOutputZ) {
+        zFeed = getProperty("liftFeedrate");
+    }
+    
+    blockStr = blockStr.replace(/F[0-9.]+/g, ""); // Usuwamy obecny Feedrate (jeśli jest)
+    blockStr += " F" + feedFormat.format(zFeed);
   }
   else if (isConvertedRapid) {
     var cFeed = getProperty("highFeedrate");
     blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(cFeed);
+  }
+
+  // Aktualizujemy pozycję Z na potrzeby kolejnych linii
+  if (targetZ !== undefined) {
+      lastOutputZ = targetZ;
   }
 
   blockStr = blockStr.replace(/\s+/g, ' ').trim();
