@@ -114,6 +114,22 @@
             </div>
         </div>
 
+        <div style="background: #1e1e1e; padding: 10px; border-radius: 4px; margin: 8px 0 12px 0; border: 1px solid #333; font-size: 12px; display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-weight: bold; color: #ddd; margin-bottom: 4px; border-bottom: 1px solid #333; padding-bottom: 4px;">▼ Knife Dimensions</div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="knife-height">Knife Height:</label>
+                <input type="number" id="knife-height" class="cfg-input" value="25.00" step="0.1" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="knife-tip-width">Knife Tip Width:</label>
+                <input type="number" id="knife-tip-width" class="cfg-input" value="1.00" step="0.1" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <label for="knife-max-width">Knife Maximum Width:</label>
+                <input type="number" id="knife-max-width" class="cfg-input" value="6.00" step="0.1" style="width: 100px; text-align: right; color: #4ec9b0;">
+            </div>
+        </div>
+
         <label class="checkbox-container" style="margin-bottom: 12px;">
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
         </label>
@@ -307,6 +323,13 @@
         if (textarea.value.trim()) parseGCode(textarea.value);
     });
 
+    // Ponowne przeliczanie przy zmianie wymiarów noża
+    ['knife-height', 'knife-tip-width', 'knife-max-width'].forEach(id => {
+        document.getElementById(id).addEventListener('input', () => {
+            if (textarea.value.trim()) parseGCode(textarea.value);
+        });
+    });
+
     function setInitialCamera() {
         camera.position.set(currentTarget.x + 100, currentTarget.y - 200, currentTarget.z + 200);
         camera.up.set(0, 0, 1);
@@ -353,10 +376,11 @@
     let feedRanges = {};
 
     function getColorForCategory(category) {
-        if (category === 'PLUNGE') return new THREE.Color(0xff3333); // Czerwony
-        if (category === 'LIFT') return new THREE.Color(0x33ff33);   // Zielony
-        if (category === 'AIR') return new THREE.Color(0xffa500);    // Pomarańczowy
-        if (category === 'FEED_XY') return new THREE.Color(0x3399ff); // Niebieski
+        if (category === 'PLUNGE') return new THREE.Color(0xff3333); 
+        if (category === 'LIFT') return new THREE.Color(0x33ff33);   
+        if (category === 'AIR') return new THREE.Color(0xffa500);    
+        if (category === 'FEED_XY') return new THREE.Color(0x3399ff); 
+        if (category === 'SHORT_SEGMENTS') return new THREE.Color(0xff0000); // Czerwony dla błędnych segmentów
         return new THREE.Color(0xaa33aa);
     }
 
@@ -525,6 +549,14 @@
     function clearGroup(group) { while(group.children.length > 0) group.remove(group.children[0]); }
 
     function parseGCode(gcode) {
+        const materialThickness = parseFloat(document.getElementById('air-threshold').value) || 16;
+        const knifeHeight = parseFloat(document.getElementById('knife-height').value) || 25;
+        const knifeTipWidth = parseFloat(document.getElementById('knife-tip-width').value) || 1;
+        const knifeMaxWidth = parseFloat(document.getElementById('knife-max-width').value) || 6;
+        
+        const effectiveDepth = Math.min(materialThickness, knifeHeight);
+        const contactLength = knifeTipWidth + ((knifeMaxWidth - knifeTipWidth) / knifeHeight) * effectiveDepth;
+
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
         clearGroup(airGroup); clearGroup(qArrowsGroup);
@@ -544,11 +576,11 @@
 
         let minF = Infinity, maxF = -Infinity; let tempF = 1000;
         
-        // Zaktualizowane kategorie
-        const feeds = { FEED_XY: new Set(), PLUNGE: new Set(), LIFT: new Set(), AIR: new Set(), Q: new Set() };
+        const feeds = { FEED_XY: new Set(), SHORT_SEGMENTS: new Set(), PLUNGE: new Set(), LIFT: new Set(), AIR: new Set(), Q: new Set() };
         let scanMode = 'G01';
         let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
 
+        // Pierwszy przebieg: Wykrywanie typu i długości segmentów
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim().toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -585,7 +617,15 @@
                     if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(tempF);
                     else if (changedZ && scanZ > prevZ) feeds.LIFT.add(tempF);
                     else if (isAir) feeds.AIR.add(tempF);
-                    else feeds.FEED_XY.add(tempF);
+                    else {
+                        // Sprawdzanie długości pod kątem błędnych segmentów w cięciu FEED_XY
+                        const segmentLen = Math.hypot(scanX - prevX, scanY - prevY);
+                        if (segmentLen < contactLength) {
+                            feeds.SHORT_SEGMENTS.add(tempF);
+                        } else {
+                            feeds.FEED_XY.add(tempF);
+                        }
+                    }
                 }
             }
         }
@@ -594,12 +634,13 @@
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '';
 
+        // Tworzenie opcji widoczności w legendzie (sidebar)
         for (const [category, feedSet] of Object.entries(feeds)) {
             if (feedSet.size === 0) continue;
 
             const catLabel = document.createElement('div');
             catLabel.style.cssText = 'font-size: 12px; color: #888; margin: 8px 0 4px 0; font-weight: bold;';
-            catLabel.innerText = `Move Type - ${category}:`;
+            catLabel.innerText = category === 'SHORT_SEGMENTS' ? 'Move Type - FEED_XY (Too Short):' : `Move Type - ${category}:`;
             feedContainer.appendChild(catLabel);
 
             Array.from(feedSet).sort((a, b) => a - b).forEach((fVal) => {
@@ -641,6 +682,7 @@
             return arrowMaterialsMap.get(key);
         }
 
+        // Drugi przebieg: Tworzenie właściwej geometrii 3D
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -692,12 +734,18 @@
                 if (changedZ && curZ < prevZ) category = 'PLUNGE';
                 else if (changedZ && curZ > prevZ) category = 'LIFT';
                 else if (isAir || motionMode === 'G00') category = 'AIR';
-                else category = 'FEED_XY';
+                else {
+                    const segmentLen = Math.hypot(curX - prevX, curY - prevY);
+                    if (segmentLen < contactLength) {
+                        category = 'SHORT_SEGMENTS';
+                    } else {
+                        category = 'FEED_XY';
+                    }
+                }
             }
 
             const groupKey = `${category}_${curF}`;
             
-            // Jesli przesuwa tylko w 'Q' lub puste, to wrzucamy do glownej airGroup
             if (category === 'Q' || !hasMovement) {
                 targetGroup = airGroup;
             } else {
@@ -706,9 +754,10 @@
 
             if (!materialsMap.has(groupKey)) {
                 let isAirCategory = (category === 'AIR' || category === 'LIFT');
+                let isShort = (category === 'SHORT_SEGMENTS');
                 const lineMat = new THREE.LineMaterial({
                     color: getColorForCategory(category).getHex(),
-                    linewidth: isAirCategory ? globalAirThickness : globalFeedThickness,
+                    linewidth: isShort ? globalFeedThickness * 1.5 : (isAirCategory ? globalAirThickness : globalFeedThickness),
                     resolution: res,
                     transparent: true,
                     opacity: 1
@@ -810,7 +859,6 @@
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
 
-    // Obsługa wyboru oraz przeładowywania plików za pomocą File System Access API
     let fileHandle = null;
     const loadFileBtn = document.getElementById('load-file-btn');
     const reloadFileBtn = document.getElementById('reload-file-btn');
