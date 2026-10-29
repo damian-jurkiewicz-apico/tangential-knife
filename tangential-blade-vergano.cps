@@ -21,16 +21,16 @@ maximumCircularSweep = toRad(180);
 allowedCircularPlanes = 1 << PLANE_XY;
 
 properties = {
-  speedAtBottom: {
-      title: "Speed at Bottom",
-      description: "Cutting feedrate when only the tip of the blade is in the material.",
+  speedAtTop: {
+      title: "Speed at Top",
+      description: "Cutting feedrate at the top of the material (shallow cut).",
       type: "number",
       value: 1000,
       group: "Feeds and Speeds"
   },
-  speedAtTop: {
-      title: "Speed at Top",
-      description: "Cutting feedrate when the blade is fully engaged in the material.",
+  speedAtBottom: {
+      title: "Speed at Bottom",
+      description: "Cutting feedrate at full depth (deep cut).",
       type: "number",
       value: 200,
       group: "Feeds and Speeds"
@@ -84,23 +84,44 @@ properties = {
       value: 1,
       group: "Knife Dimensions"
   },
-  liftAtCorner: {
-      title: "Corner lift angle",
-      description: "Angular threshold above which the blade lifts and rotates.",
+  liftAtCornerTop: {
+      title: "Corner lift angle at Top",
+      description: "Angular threshold for shallow cuts (top of material).",
+      type: "angle",
+      value: 50,
+      group: "Geometry and Knife Operation"
+  },
+  liftAtCornerBottom: {
+      title: "Corner lift angle at Bottom",
+      description: "Angular threshold for deep cuts (full depth).",
       type: "angle",
       value: 0.5,
       group: "Geometry and Knife Operation"
   },
-  minArcRadius: {
-      title: "Minimum arc radius",
-      description: "Threshold for linearizing arcs into line segments.",
+  minArcRadiusTop: {
+      title: "Minimum arc radius at Top",
+      description: "Threshold for linearizing arcs into line segments (shallow cut).",
+      type: "number",
+      value: 20,
+      group: "Geometry and Knife Operation"
+  },
+  minArcRadiusBottom: {
+      title: "Minimum arc radius at Bottom",
+      description: "Threshold for linearizing arcs into line segments (full depth).",
       type: "number",
       value: 10,
       group: "Geometry and Knife Operation"
   },
-  minLinearRadius: {
-      title: "Absolute minimum radius",
-      description: "Radius replaced by a single linear move.",
+  minLinearRadiusTop: {
+      title: "Absolute min radius at Top",
+      description: "Radius replaced by a single linear move (shallow cut).",
+      type: "number",
+      value: 10,
+      group: "Geometry and Knife Operation"
+  },
+  minLinearRadiusBottom: {
+      title: "Absolute min radius at Bottom",
+      description: "Radius replaced by a single linear move (full depth).",
       type: "number",
       value: 5,
       group: "Geometry and Knife Operation"
@@ -138,33 +159,35 @@ var c_rad = KNIFE_OFFSET_RAD;
 var isRapid = false;
 
 var pendingPlungeZ = undefined;
-var lastOutputZ = undefined; // Zmienna śledząca wysokość Z do rozróżniania Plunge / Lift
+var lastOutputZ = undefined; 
 
 var currentStockTop = 0; 
 
-function calculateDynamicFeed(currentZ) {
+function getDynamicParameter(currentZ, topValue, bottomValue) {
   var engagement = currentStockTop - currentZ;
 
+  // Jesli zaaglebienie jest rowne 0 (lub jestesmy ponad z materialem), uzywamy wlasciwosci TOP
   if (engagement <= 0) {
-    return getProperty("speedAtBottom");
+    return topValue;
   }
 
   var kHeight = getProperty("knifeHeight");
+  // Jesli zagłębienie przekracza wysokosc noza, uzywamy wlasciwosci BOTTOM
   if (engagement > kHeight) {
     engagement = kHeight;
   }
 
-  var sBottom = getProperty("speedAtBottom");
-  var sTop = getProperty("speedAtTop");
-
   var ratio = engagement / kHeight;
-  var dynamicFeed = sBottom - ((sBottom - sTop) * ratio);
+  // Interpolacja liniowa: startujemy od wartosci TOP i zblizamy sie do BOTTOM
+  return topValue + ((bottomValue - topValue) * ratio);
+}
 
+function calculateDynamicFeed(currentZ) {
+  var dynamicFeed = getDynamicParameter(currentZ, getProperty("speedAtTop"), getProperty("speedAtBottom"));
   return Math.round(dynamicFeed * 100) / 100;
 }
 
-
-function updateC(target_rad) {
+function updateC(target_rad, currentZ) {
   var delta_rad = (target_rad - c_rad);
 
   var normalized_delta = delta_rad % (2 * Math.PI);
@@ -178,8 +201,9 @@ function updateC(target_rad) {
   
   var rotFeed = getProperty("rotationFeedrate");
   var isPhysicallyDown = (pendingPlungeZ === undefined);
+  var dynamicLiftAngle = getDynamicParameter(currentZ, getProperty("liftAtCornerTop"), getProperty("liftAtCornerBottom"));
 
-  if (Math.abs(normalized_delta) > toRad(getProperty("liftAtCorner"))) { 
+  if (Math.abs(normalized_delta) > toRad(dynamicLiftAngle)) { 
     if (isPhysicallyDown) moveUp();
     gMotionModal.reset();
     c_rad += normalized_delta;
@@ -197,12 +221,12 @@ function updateC(target_rad) {
 
 function moveUp() {
    var retractZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : 15;
-   retractPos = getCurrentPosition();
+   var retractPos = getCurrentPosition();
    onRapid(retractPos.x, retractPos.y, retractZ);
 }
 
 function moveDown() {
-  plungePos = getCurrentPosition();
+  var plungePos = getCurrentPosition();
   var z = zOutput.format(plungePos.z); 
   if (z) {
     gMotionModal.reset();
@@ -219,20 +243,18 @@ function writeBlock() {
   
   blockStr = blockStr.replace("G00", "G01");
 
-  // Sprawdzamy czy ruch odbywa się wyłącznie w osi Z
   var isZOnly = (blockStr.indexOf("Z") !== -1 && blockStr.indexOf("X") === -1 && blockStr.indexOf("Y") === -1);
   var targetZMatch = blockStr.match(/Z([+-]?[0-9.]+)/);
   var targetZ = targetZMatch ? parseFloat(targetZMatch[1]) : undefined;
 
   if (isZOnly) {
-    var zFeed = getProperty("plungeFeedrate"); // Domyślnie Plunge
+    var zFeed = getProperty("plungeFeedrate"); 
     
-    // Jeśli znamy poprzednie Z i nowe Z jest wyższe - jest to ruch podnoszenia (Lift)
     if (lastOutputZ !== undefined && targetZ !== undefined && targetZ > lastOutputZ) {
         zFeed = getProperty("liftFeedrate");
     }
     
-    blockStr = blockStr.replace(/F[0-9.]+/g, ""); // Usuwamy obecny Feedrate (jeśli jest)
+    blockStr = blockStr.replace(/F[0-9.]+/g, ""); 
     blockStr += " F" + feedFormat.format(zFeed);
   }
   else if (isConvertedRapid) {
@@ -241,7 +263,6 @@ function writeBlock() {
     blockStr += " F" + feedFormat.format(cFeed);
   }
 
-  // Aktualizujemy pozycję Z na potrzeby kolejnych linii
   if (targetZ !== undefined) {
       lastOutputZ = targetZ;
   }
@@ -319,7 +340,8 @@ function onLinear(_x, _y, _z, feed) {
   var isTravel = (start.z >= retractZ - 0.01) && (_z >= retractZ - 0.01);
 
   if (!(start.x == _x && start.y == _y) && !isTravel) {
-      updateC(orientation_rad);
+      var activeZ = (pendingPlungeZ !== undefined) ? pendingPlungeZ : _z;
+      updateC(orientation_rad, activeZ);
   }
   
   if (pendingPlungeZ !== undefined) {
@@ -344,13 +366,16 @@ function onLinear(_x, _y, _z, feed) {
 
 function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
+  var activeZ = (pendingPlungeZ !== undefined) ? pendingPlungeZ : z;
 
-  if (radius <= getProperty("minLinearRadius")) {
+  var dynamicMinLinearRadius = getDynamicParameter(activeZ, getProperty("minLinearRadiusTop"), getProperty("minLinearRadiusBottom"));
+  if (radius <= dynamicMinLinearRadius) {
     onLinear(x, y, z, 0); 
     return;
   }
   
-  if (radius <= getProperty("minArcRadius")) {
+  var dynamicMinArcRadius = getDynamicParameter(activeZ, getProperty("minArcRadiusTop"), getProperty("minArcRadiusBottom"));
+  if (radius <= dynamicMinArcRadius) {
     var t = tolerance;
     if (hasParameter("operation:tolerance")) {
       t = getParameter("operation:tolerance");
@@ -374,7 +399,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     
     var start_dir = tangent.getXYAngle() + KNIFE_OFFSET_RAD;
 
-    updateC(start_dir);
+    updateC(start_dir, activeZ);
 
     if (pendingPlungeZ !== undefined) {
         var zStr = zOutput.format(pendingPlungeZ);
@@ -393,7 +418,6 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       c_rad += arcAngle;
     }
     
-    // --- Tutaj wchodzi dynamiczny posuw ---
     var outputFeed = calculateDynamicFeed(z);
     
     feedOutput.reset(); 
