@@ -94,7 +94,7 @@ properties = {
   },
   minLinearRadiusTop: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable. Safe default: knife tip width (narrowest part).",
       type: "spatial",
       scope: "post",
       value: toPreciseUnit(1.0, MM),
@@ -119,7 +119,7 @@ properties = {
   },
   minLinearRadiusBottom: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable. Safe default: knife maximum width (widest part).",
       type: "spatial",
       scope: "post",
       value: toPreciseUnit(6.0, MM),
