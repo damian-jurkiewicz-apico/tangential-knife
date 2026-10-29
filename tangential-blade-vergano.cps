@@ -21,48 +21,97 @@ maximumCircularSweep = toRad(180);
 allowedCircularPlanes = 1 << PLANE_XY;
 
 properties = {
-  speedAtTop: {
-      title: "Speed at Top",
-      description: "Cutting feedrate at the top of the material (shallow cut).",
-      type: "number",
-      value: 1000,
-      group: "Feeds and Speeds"
-  },
-  speedAtBottom: {
-      title: "Speed at Bottom",
-      description: "Cutting feedrate at full depth (deep cut).",
-      type: "number",
-      value: 200,
-      group: "Feeds and Speeds"
-  },
+  // --- GENERAL SPEEDS ---
   plungeFeedrate: {
-      title: "Plunge feedrate",
-      description: "Feedrate for lowering and plunging the blade in the Z axis.",
+      title: "Plunge Z Feedrate",
+      description: "Feedrate for lowering and plunging the blade along the Z axis.",
       type: "number",
       value: 400,
-      group: "Feeds and Speeds"
+      group: "General Speeds"
   },
   liftFeedrate: {
-      title: "Lift feedrate",
-      description: "Feedrate for lifting and retracting the blade in the Z axis.",
+      title: "Lift Z Feedrate",
+      description: "Feedrate for lifting and retracting the blade along the Z axis.",
       type: "number",
       value: 1000,
-      group: "Feeds and Speeds"
+      group: "General Speeds"
   },
   rotationFeedrate: {
-      title: "Rotation feedrate",
-      description: "Rotation speed of the Q1 axis alone in the air above a corner.",
+      title: "Rotation Q Feedrate",
+      description: "Rotation speed of the Q1 axis when rotating in the air above a corner.",
       type: "number",
       value: 666,
-      group: "Feeds and Speeds"
+      group: "General Speeds"
   },
   highFeedrate: {
-      title: "Rapid feedrate",
+      title: "XY Feedrate Above Material",
       description: "Feedrate for rapid moves in the air between contours.",
       type: "number",
       value: 3000,
-      group: "Feeds and Speeds"
+      group: "General Speeds"
   },
+
+  // --- OPERATION AT TOP ---
+  speedAtTop: {
+      title: "Feed at Top",
+      description: "Cutting feedrate at this level.",
+      type: "number",
+      value: 1000,
+      group: "Operation at Top"
+  },
+  liftAtCornerTop: {
+      title: "Maximum Cutting Angle",
+      description: "When an angle is larger than this threshold, the Z axis will lift and rotate in the air.",
+      type: "angle",
+      value: 50,
+      group: "Operation at Top"
+  },
+  minArcRadiusTop: {
+      title: "Minimum Non-Linearized Radius",
+      description: "Radii smaller than this threshold will be converted into segments.",
+      type: "number",
+      value: 20,
+      group: "Operation at Top"
+  },
+  minLinearRadiusTop: {
+      title: "Absolute Minimum Radius",
+      description: "Radii smaller than this threshold will be converted into a single segment.",
+      type: "number",
+      value: 10,
+      group: "Operation at Top"
+  },
+
+  // --- OPERATION AT BOTTOM ---
+  speedAtBottom: {
+      title: "Feed at Bottom",
+      description: "Cutting feedrate at this level.",
+      type: "number",
+      value: 200,
+      group: "Operation at Bottom"
+  },
+  liftAtCornerBottom: {
+      title: "Maximum Cutting Angle",
+      description: "When an angle is larger than this threshold, the Z axis will lift and rotate in the air.",
+      type: "angle",
+      value: 0.5,
+      group: "Operation at Bottom"
+  },
+  minArcRadiusBottom: {
+      title: "Minimum Non-Linearized Radius",
+      description: "Radii smaller than this threshold will be converted into segments.",
+      type: "number",
+      value: 10,
+      group: "Operation at Bottom"
+  },
+  minLinearRadiusBottom: {
+      title: "Absolute Minimum Radius",
+      description: "Radii smaller than this threshold will be converted into a single segment.",
+      type: "number",
+      value: 5,
+      group: "Operation at Bottom"
+  },
+
+  // --- KNIFE DIMENSIONS ---
   knifeHeight: {
       title: "Knife Height",
       description: "Total height of the cutting blade (mm).",
@@ -71,60 +120,18 @@ properties = {
       group: "Knife Dimensions"
   },
   knifeWidthTop: {
-      title: "Knife Width Max (Top)",
-      description: "Width of the blade at its base (info only).",
+      title: "Knife Maximum Width",
+      description: "Width of the blade at its base (for reference only).",
       type: "number",
       value: 6,
       group: "Knife Dimensions"
   },
   knifeWidthBottom: {
-      title: "Knife Width Min (Bottom)",
-      description: "Width of the blade at the tip (info only).",
+      title: "Knife Tip Width",
+      description: "Width of the blade at the tip (for reference only).",
       type: "number",
       value: 1,
       group: "Knife Dimensions"
-  },
-  liftAtCornerTop: {
-      title: "Corner lift angle at Top",
-      description: "Angular threshold for shallow cuts (top of material).",
-      type: "angle",
-      value: 50,
-      group: "Geometry and Knife Operation"
-  },
-  liftAtCornerBottom: {
-      title: "Corner lift angle at Bottom",
-      description: "Angular threshold for deep cuts (full depth).",
-      type: "angle",
-      value: 0.5,
-      group: "Geometry and Knife Operation"
-  },
-  minArcRadiusTop: {
-      title: "Minimum arc radius at Top",
-      description: "Threshold for linearizing arcs into line segments (shallow cut).",
-      type: "number",
-      value: 20,
-      group: "Geometry and Knife Operation"
-  },
-  minArcRadiusBottom: {
-      title: "Minimum arc radius at Bottom",
-      description: "Threshold for linearizing arcs into line segments (full depth).",
-      type: "number",
-      value: 10,
-      group: "Geometry and Knife Operation"
-  },
-  minLinearRadiusTop: {
-      title: "Absolute min radius at Top",
-      description: "Radius replaced by a single linear move (shallow cut).",
-      type: "number",
-      value: 10,
-      group: "Geometry and Knife Operation"
-  },
-  minLinearRadiusBottom: {
-      title: "Absolute min radius at Bottom",
-      description: "Radius replaced by a single linear move (full depth).",
-      type: "number",
-      value: 5,
-      group: "Geometry and Knife Operation"
   }
 };
 
