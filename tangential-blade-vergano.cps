@@ -201,7 +201,22 @@ function getDynamicParameter(currentZ, topValue, bottomValue) {
     engagement = kHeight;
   }
 
-  var ratio = engagement / kHeight;
+  // Pobranie szerokości noża z właściwości postprocesora
+  var wTop = getProperty("knifeWidthTop");
+  var wBot = getProperty("knifeWidthBottom");
+
+  // 1. Obliczenie szerokości ostrza na aktualnej linii cięcia (powierzchni materiału)
+  var currentWidth = wBot + (wTop - wBot) * (engagement / kHeight);
+
+  // 2. Pole przekroju części noża aktualnie pracującej w materiale (pole trapezu)
+  var engagedArea = ((wBot + currentWidth) / 2) * engagement;
+
+  // 3. Całkowite pole przekroju roboczego noża
+  var totalArea = ((wBot + wTop) / 2) * kHeight;
+
+  // 4. Nieliniowy współczynnik (0.0 - 1.0) oparty na fizycznym oporze materiału
+  var ratio = engagedArea / totalArea;
+
   return topValue + ((bottomValue - topValue) * ratio);
 }
 
