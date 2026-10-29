@@ -162,6 +162,7 @@ var pendingPlungeZ = undefined;
 var lastOutputZ = undefined; 
 
 var currentStockTop = 0; 
+var initialSafeZDone = false;
 
 function getDynamicParameter(currentZ, topValue, bottomValue) {
   var engagement = currentStockTop - currentZ;
@@ -305,6 +306,21 @@ function onSection() {
     currentStockTop = getParameter("part-upper-z");
   } else {
     currentStockTop = currentSection.getGlobalZRange().getMaximum();
+  }
+
+  // Na poczatku pierwszej sekcji ustaw Z na wysokosc bezpieczna.
+  // Uzywamy tej samej wysokosci co moveUp(); domyslnie Z15.
+  if (!initialSafeZDone) {
+  var initialSafeZ = hasParameter("operation:retractHeight_value") ? getParameter("operation:retractHeight_value") : getProperty("knifeHeight");
+    var initialSafeZWord = zOutput.format(initialSafeZ);
+    if (initialSafeZWord) {
+      writeln("N" + sequenceNumber + " G01 " + initialSafeZWord + " F" + feedFormat.format(getProperty("liftFeedrate")));
+      sequenceNumber += 1;
+      lastOutputZ = initialSafeZ;
+      gMotionModal.reset();
+      feedOutput.reset();
+    }
+    initialSafeZDone = true;
   }
 
   c_rad = KNIFE_OFFSET_RAD;
