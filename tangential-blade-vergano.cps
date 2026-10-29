@@ -23,29 +23,29 @@ allowedCircularPlanes = 1 << PLANE_XY;
 properties = {
   // --- GENERAL SPEEDS ---
   plungeFeedrate: {
-      title: "Plunge Z Feedrate",
-      description: "Feedrate for lowering and plunging the blade along the Z axis.",
+      title: "Plunge Z Feedrate [mm/min]",
+      description: "Feedrate for lowering and plunging the blade along the Z axis (mm/min).",
       type: "number",
       value: 400,
       group: "General Speeds"
   },
   liftFeedrate: {
-      title: "Lift Z Feedrate",
-      description: "Feedrate for lifting and retracting the blade along the Z axis.",
+      title: "Lift Z Feedrate [mm/min]",
+      description: "Feedrate for lifting and retracting the blade along the Z axis (mm/min).",
       type: "number",
-      value: 1000,
+      value: 600,
       group: "General Speeds"
   },
   rotationFeedrate: {
-      title: "Rotation Q Feedrate",
-      description: "Rotation speed of the Q1 axis when rotating in the air above a corner.",
+      title: "Rotation Q Feedrate [deg/min]",
+      description: "Rotation speed of the Q1 axis when rotating in the air above a corner (deg/min).",
       type: "number",
-      value: 666,
+      value: 12000,
       group: "General Speeds"
   },
   highFeedrate: {
-      title: "XY Feedrate Above Material",
-      description: "Feedrate for rapid moves in the air between contours.",
+      title: "XY Feedrate Above Material [mm/min]",
+      description: "Feedrate for rapid moves in the air between contours (mm/min).",
       type: "number",
       value: 3000,
       group: "General Speeds"
@@ -53,84 +53,93 @@ properties = {
 
   // --- OPERATION AT TOP ---
   speedAtTop: {
-      title: "Feed at Top",
-      description: "Cutting feedrate at this level.",
+      title: "Feed at Top [mm/min]",
+      description: "Cutting feedrate at this level (mm/min).",
       type: "number",
-      value: 1000,
+      value: 1500,
       group: "Operation at Top"
   },
   liftAtCornerTop: {
       title: "Maximum Cutting Angle",
       description: "When an angle is larger than this threshold, the Z axis will lift and rotate in the air.",
       type: "angle",
-      value: 50,
+      scope: "post",
+      value: 60,
       group: "Operation at Top"
   },
   minArcRadiusTop: {
       title: "Minimum Non-Linearized Radius",
-      description: "Radii smaller than this threshold will be converted into segments.",
-      type: "number",
-      value: 20,
+      description: "Radii smaller than this threshold will be converted into segments. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1.0, MM),
       group: "Operation at Top"
   },
   minLinearRadiusTop: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment.",
-      type: "number",
-      value: 10,
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1.0, MM),
       group: "Operation at Top"
   },
 
   // --- OPERATION AT BOTTOM ---
   speedAtBottom: {
-      title: "Feed at Bottom",
-      description: "Cutting feedrate at this level.",
+      title: "Feed at Bottom [mm/min]",
+      description: "Cutting feedrate at this level (mm/min).",
       type: "number",
-      value: 200,
+      value: 1000,
       group: "Operation at Bottom"
   },
   liftAtCornerBottom: {
       title: "Maximum Cutting Angle",
       description: "When an angle is larger than this threshold, the Z axis will lift and rotate in the air.",
       type: "angle",
-      value: 0.5,
+      scope: "post",
+      value: 30,
       group: "Operation at Bottom"
   },
   minArcRadiusBottom: {
       title: "Minimum Non-Linearized Radius",
-      description: "Radii smaller than this threshold will be converted into segments.",
-      type: "number",
-      value: 10,
+      description: "Radii smaller than this threshold will be converted into segments. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1, MM),
       group: "Operation at Bottom"
   },
   minLinearRadiusBottom: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment.",
-      type: "number",
-      value: 5,
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(6.0, MM),
       group: "Operation at Bottom"
   },
 
   // --- KNIFE DIMENSIONS ---
   knifeHeight: {
       title: "Knife Height",
-      description: "Total height of the cutting blade (mm).",
-      type: "number",
-      value: 25,
+      description: "Total height of the cutting blade.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(25.0, MM),
       group: "Knife Dimensions"
   },
   knifeWidthTop: {
       title: "Knife Maximum Width",
-      description: "Width of the blade at its base (for reference only).",
-      type: "number",
-      value: 6,
+      description: "Width of the blade at its base.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(6.0, MM),
       group: "Knife Dimensions"
   },
   knifeWidthBottom: {
       title: "Knife Tip Width",
-      description: "Width of the blade at the tip (for reference only).",
-      type: "number",
-      value: 1,
+      description: "Width of the blade at the tip.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(1.0, MM),
       group: "Knife Dimensions"
   }
 };
