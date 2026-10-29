@@ -78,8 +78,8 @@
 <div id="sidebar">
     <div class="panel-section">
         <h2>G-Code File</h2>
-        <label class="btn" for="file-input">Load .nc / .gcode file</label>
-        <input type="file" id="file-input" accept=".nc,.gcode,.tap,.txt">
+        <button class="btn" id="load-file-btn">Load .nc / .gcode file</button>
+        <button class="btn btn-secondary" id="reload-file-btn" style="margin-top: 8px; width: 100%; display: none; background: #d97706;">Reload file</button>
     </div>
 
     <div class="panel-section">
@@ -831,11 +831,64 @@
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
 
-    document.getElementById('file-input').addEventListener('change', (e) => {
-        const file = e.target.files[0]; if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => { textarea.value = evt.target.result; parseGCode(evt.target.result); };
-        reader.readAsText(file);
+    // Obsługa wyboru oraz przeładowywania plików za pomocą File System Access API
+    let fileHandle = null;
+    const loadFileBtn = document.getElementById('load-file-btn');
+    const reloadFileBtn = document.getElementById('reload-file-btn');
+
+    async function readFileFromHandle(handle) {
+        try {
+            const file = await handle.getFile();
+            const text = await file.text();
+            textarea.value = text;
+            parseGCode(text);
+            return true;
+        } catch (error) {
+            console.error("Błąd odczytu pliku:", error);
+            return false;
+        }
+    }
+
+    loadFileBtn.addEventListener('click', async () => {
+        try {
+            if ('showOpenFilePicker' in window) {
+                [fileHandle] = await window.showOpenFilePicker({
+                    types: [{
+                        description: 'G-Code Files',
+                        accept: {
+                            'text/plain': ['.nc', '.gcode', '.tap', '.txt']
+                        }
+                    }],
+                    multiple: false
+                });
+
+                if (fileHandle) {
+                    const success = await readFileFromHandle(fileHandle);
+                    if (success) {
+                        reloadFileBtn.style.display = 'block';
+                        showToast("Plik załadowany pomyślnie!");
+                    }
+                }
+            } else {
+                showToast("Twoja przeglądarka nie obsługuje trwałego odczytu. Użyj Chrome lub Edge.");
+            }
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                showToast("Błąd podczas otwierania pliku.");
+                console.error(err);
+            }
+        }
+    });
+
+    reloadFileBtn.addEventListener('click', async () => {
+        if (!fileHandle) return;
+
+        const success = await readFileFromHandle(fileHandle);
+        if (success) {
+            showToast("Plik przeładowany pomyślnie!");
+        } else {
+            showToast("Błąd: Nie można odczytać pliku. Sprawdź, czy nie został usunięty.");
+        }
     });
 
     document.getElementById('parse-text-btn').addEventListener('click', () => parseGCode(textarea.value) );
