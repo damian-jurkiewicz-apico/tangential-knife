@@ -23,29 +23,29 @@ allowedCircularPlanes = 1 << PLANE_XY;
 properties = {
   // --- GENERAL SPEEDS ---
   plungeFeedrate: {
-      title: "Plunge Z Feedrate [mm/min]",
+      title: "Plunge Z Feedrate",
       description: "Feedrate for lowering and plunging the blade along the Z axis (mm/min).",
       type: "number",
       value: 400,
       group: "General Speeds"
   },
   liftFeedrate: {
-      title: "Lift Z Feedrate [mm/min]",
+      title: "Lift Z Feedrate",
       description: "Feedrate for lifting and retracting the blade along the Z axis (mm/min).",
       type: "number",
       value: 600,
       group: "General Speeds"
   },
   rotationFeedrate: {
-      title: "Rotation Q Feedrate [deg/min]",
+      title: "Rotation Q Feedrate",
       description: "Rotation speed of the Q1 axis when rotating in the air above a corner (deg/min).",
       type: "number",
       value: 12000,
       group: "General Speeds"
   },
   highFeedrate: {
-      title: "XY Feedrate Above Material [mm/min]",
-      description: "Feedrate for rapid moves in the air between contours (mm/min).",
+      title: "XY Feedrate Above Material",
+      description: "Feedrate for rapid moves in the air between contours.",
       type: "number",
       value: 3000,
       group: "General Speeds"
@@ -54,9 +54,9 @@ properties = {
   // --- ARC LINEARIZATION RANGE ---
   enableArcLinearization: {
       title: "Enable Arc Linearization Range",
-      description: "If enabled, arcs within the min/max radius range will be converted into linear segments.",
+      description: "If enabled, arcs within the min/max radius range will be converted into linear segments. Set '2D-Contour->Passes->Tolerance' to control the segment density.",
       type: "boolean",
-      value: true,
+      value: false,
       group: "Arc Linearization Range"
   },
   minArcRadiusRange: {
@@ -78,7 +78,7 @@ properties = {
 
   // --- OPERATION AT TOP ---
   speedAtTop: {
-      title: "Feed at Top [mm/min]",
+      title: "Feed at Top",
       description: "Cutting feedrate at this level (mm/min).",
       type: "number",
       value: 1500,
@@ -103,7 +103,7 @@ properties = {
 
   // --- OPERATION AT BOTTOM ---
   speedAtBottom: {
-      title: "Feed at Bottom [mm/min]",
+      title: "Feed at Bottom",
       description: "Cutting feedrate at this level (mm/min).",
       type: "number",
       value: 1000,
