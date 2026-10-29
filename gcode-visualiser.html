@@ -133,6 +133,10 @@
         <label class="checkbox-container" style="margin-bottom: 12px;">
             <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
         </label>
+        
+        <label class="checkbox-container" style="margin-bottom: 12px;">
+            <input type="checkbox" id="toggle-knife-rotation" checked> Show Knife Rotation (Arc)
+        </label>
     </div>
 
     <div class="panel-section">
@@ -166,7 +170,15 @@
             <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; padding: 0 5px;">
                 <div>
                     <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Knife Vector Length: <span id="vector-length-val" style="color:#4ec9b0;">50%</span></label>
-                    <input type="range" id="vector-length-slider" min="0" max="100" value="50" style="width: 100%; margin-top: 4px;">
+                    <input type="range" id="vector-length-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div>
+                    <label for="vector-size-slider" style="font-size: 12px; color: #aaa;">Knife Vector Size: <span id="vector-size-val" style="color:#4ec9b0;">50%</span></label>
+                    <input type="range" id="vector-size-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
+                </div>
+                <div>
+                    <label for="rotation-size-slider" style="font-size: 12px; color: #aaa;">Rotation Arrow Size: <span id="rotation-size-val" style="color:#4ec9b0;">50%</span></label>
+                    <input type="range" id="rotation-size-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
                 </div>
                 <div>
                     <label for="arrow-size-slider" style="font-size: 12px; color: #aaa;">Path Arrowhead Size: <span id="arrow-size-val" style="color:#4ec9b0;">8</span></label>
@@ -247,14 +259,26 @@
     controls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.PAN };
 
     let panelMesh = null;
-    let globalVectorLength = 50;
     let globalFeedThickness = 2;
     let globalAirThickness = 2;
     let globalArrowSize = 8;
 
+    let globalVectorPercent = 50;
+    let globalVectorSizePercent = 50;
+    let globalRotationPercent = 50;
+    
+    function getVectorLength() { return 10 + (globalVectorPercent / 100) * 90; }
+    function getVectorThickness() { return 1 + (globalVectorSizePercent / 100) * 5; }
+    function getVectorHeadSize() { return 3 + (globalVectorSizePercent / 100) * 15; }
+
+    function getRotationThickness() { return 1 + (globalRotationPercent / 100) * 5; }
+    function getRotationHeadSize() { return 3 + (globalRotationPercent / 100) * 15; }
+
     let allFeedMaterials = [];
     let allAirMaterials = [];
     let lineArrowheads = [];
+    let allVectorMaterials = [];
+    let allRotationMaterials = [];
 
     const arrowheadGeometry = new THREE.ConeGeometry(0.35, 1, 12);
     arrowheadGeometry.translate(0, -0.5, 0);
@@ -294,15 +318,14 @@
 
     updatePanelBox();
 
-    document.getElementById('panel-width').addEventListener('input', updatePanelBox);
-    document.getElementById('panel-length').addEventListener('input', updatePanelBox);
-
     let feedGroupsMap = new Map();
     let airGroup = new THREE.Group();
     let qArrowsGroup = new THREE.Group();
+    let qRotationsGroup = new THREE.Group();
 
     scene.add(airGroup);
     scene.add(qArrowsGroup);
+    scene.add(qRotationsGroup);
 
     const raycaster = new THREE.Raycaster();
     raycaster.params.Line.threshold = 4;
@@ -323,7 +346,6 @@
         if (textarea.value.trim()) parseGCode(textarea.value);
     });
 
-    // Ponowne przeliczanie przy zmianie wymiarów noża
     ['knife-height', 'knife-tip-width', 'knife-max-width'].forEach(id => {
         document.getElementById(id).addEventListener('input', () => {
             if (textarea.value.trim()) parseGCode(textarea.value);
@@ -373,14 +395,12 @@
         document.getElementById('selected-line-text').innerText = lineContent || '(Empty line)';
     }
 
-    let feedRanges = {};
-
     function getColorForCategory(category) {
         if (category === 'PLUNGE') return new THREE.Color(0xff3333); 
         if (category === 'LIFT') return new THREE.Color(0x33ff33);   
         if (category === 'AIR') return new THREE.Color(0xffa500);    
         if (category === 'FEED_XY') return new THREE.Color(0x3399ff); 
-        if (category === 'SHORT_SEGMENTS') return new THREE.Color(0xff0000); // Czerwony dla błędnych segmentów
+        if (category === 'SHORT_SEGMENTS') return new THREE.Color(0xff0000); 
         return new THREE.Color(0xaa33aa);
     }
 
@@ -389,6 +409,7 @@
         feedGroupsMap.forEach((grp) => { if (grp.visible) clickable.push(...grp.children); });
         if (airGroup.visible) clickable.push(...airGroup.children);
         if (qArrowsGroup.visible) clickable.push(...qArrowsGroup.children);
+        if (qRotationsGroup.visible) clickable.push(...qRotationsGroup.children);
         return clickable.filter(obj => obj.visible);
     }
 
@@ -472,11 +493,94 @@
     const vectorLengthSlider = document.getElementById('vector-length-slider');
     const vectorLengthVal = document.getElementById('vector-length-val');
     vectorLengthSlider.addEventListener('input', (e) => {
-        const percent = parseFloat(e.target.value);
-        vectorLengthVal.innerText = percent + "%";
-        globalVectorLength = 20 + (percent / 100) * (80 - 20);
-        qArrowsGroup.children.forEach(arrow => {
-            if (arrow.setLength) arrow.setLength(globalVectorLength, globalVectorLength * 0.4, globalVectorLength * 0.3);
+        globalVectorPercent = parseFloat(e.target.value);
+        vectorLengthVal.innerText = globalVectorPercent + "%";
+        
+        const vLen = getVectorLength();
+        
+        qArrowsGroup.children.forEach(grp => {
+            if (grp.userData.origin && grp.userData.dir) {
+                const origin = grp.userData.origin;
+                const dir = grp.userData.dir;
+                const endPt = origin.clone().add(dir.clone().multiplyScalar(vLen));
+                
+                const line = grp.children[0];
+                if (line && line.geometry && line.geometry.setPositions) {
+                    line.geometry.setPositions([origin.x, origin.y, origin.z, endPt.x, endPt.y, endPt.z]);
+                    line.computeLineDistances();
+                }
+                
+                const head = grp.children[1];
+                if (head) {
+                    head.position.copy(endPt);
+                }
+            }
+        });
+
+        qRotationsGroup.children.forEach(grp => {
+            if (grp.userData.center) {
+                const radius = vLen * 0.6;
+                const c = grp.userData.center;
+                const rStart = grp.userData.radStart;
+                const rEnd = grp.userData.radEnd;
+                const segments = 24;
+                const angleDiff = rEnd - rStart;
+                const arcPoints = [];
+                for (let s = 0; s <= segments; s++) {
+                    const a = rStart + (angleDiff * (s / segments));
+                    arcPoints.push(c.x + Math.cos(a) * radius, c.y + Math.sin(a) * radius, c.z);
+                }
+                
+                const line = grp.children[0];
+                if (line && line.geometry && line.geometry.setPositions) {
+                    line.geometry.setPositions(arcPoints);
+                    line.computeLineDistances();
+                }
+                
+                const head = grp.children[1];
+                if (head) {
+                    const n = arcPoints.length;
+                    const pEnd = new THREE.Vector3(arcPoints[n-3], arcPoints[n-2], arcPoints[n-1]);
+                    const pPrev = new THREE.Vector3(arcPoints[n-6], arcPoints[n-5], arcPoints[n-4]);
+                    head.position.copy(pEnd);
+                    head.quaternion.setFromUnitVectors(arrowAxis, pEnd.clone().sub(pPrev).normalize());
+                }
+            }
+        });
+    });
+
+    const vectorSizeSlider = document.getElementById('vector-size-slider');
+    const vectorSizeVal = document.getElementById('vector-size-val');
+    vectorSizeSlider.addEventListener('input', (e) => {
+        globalVectorSizePercent = parseFloat(e.target.value);
+        vectorSizeVal.innerText = globalVectorSizePercent + "%";
+        
+        const vThick = getVectorThickness();
+        const vHead = getVectorHeadSize();
+
+        allVectorMaterials.forEach(mat => mat.linewidth = vThick);
+        
+        qArrowsGroup.children.forEach(grp => {
+            const head = grp.children[1];
+            if (head) {
+                head.scale.setScalar(vHead);
+            }
+        });
+    });
+
+    const rotationSizeSlider = document.getElementById('rotation-size-slider');
+    const rotationSizeVal = document.getElementById('rotation-size-val');
+    rotationSizeSlider.addEventListener('input', (e) => {
+        globalRotationPercent = parseFloat(e.target.value);
+        rotationSizeVal.innerText = globalRotationPercent + "%";
+        
+        const rThick = getRotationThickness();
+        const rHead = getRotationHeadSize();
+
+        allRotationMaterials.forEach(mat => mat.linewidth = rThick);
+        qRotationsGroup.children.forEach(grp => {
+            const head = grp.children[1];
+            if (head) head.scale.setScalar(rHead);
         });
     });
 
@@ -533,6 +637,7 @@
         };
         feedGroupsMap.forEach(grp => processGroup(grp));
         processGroup(airGroup); processGroup(qArrowsGroup);
+        processGroup(qRotationsGroup);
     }
 
     window.addEventListener('resize', () => {
@@ -544,6 +649,8 @@
         if (highlightMaterial) highlightMaterial.resolution.copy(res);
         allFeedMaterials.forEach(mat => mat.resolution.copy(res));
         allAirMaterials.forEach(mat => mat.resolution.copy(res));
+        allVectorMaterials.forEach(mat => mat.resolution.copy(res));
+        allRotationMaterials.forEach(mat => mat.resolution.copy(res));
     });
 
     function clearGroup(group) { while(group.children.length > 0) group.remove(group.children[0]); }
@@ -560,10 +667,13 @@
         resetHoveredObject();
         feedGroupsMap.forEach((grp) => scene.remove(grp)); feedGroupsMap.clear();
         clearGroup(airGroup); clearGroup(qArrowsGroup);
-
+        clearGroup(qRotationsGroup);
+        
         allFeedMaterials = [];
         allAirMaterials = [];
         lineArrowheads = [];
+        allVectorMaterials = [];
+        allRotationMaterials = [];
 
         document.getElementById('selected-line-num').innerText = '-';
         document.getElementById('selected-line-text').innerText = 'Click path in 3D...';
@@ -580,7 +690,6 @@
         let scanMode = 'G01';
         let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
 
-        // Pierwszy przebieg: Wykrywanie typu i długości segmentów
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim().toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -618,7 +727,6 @@
                     else if (changedZ && scanZ > prevZ) feeds.LIFT.add(tempF);
                     else if (isAir) feeds.AIR.add(tempF);
                     else {
-                        // Sprawdzanie długości pod kątem błędnych segmentów w cięciu FEED_XY
                         const segmentLen = Math.hypot(scanX - prevX, scanY - prevY);
                         if (segmentLen < contactLength) {
                             feeds.SHORT_SEGMENTS.add(tempF);
@@ -634,7 +742,6 @@
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '';
 
-        // Tworzenie opcji widoczności w legendzie (sidebar)
         for (const [category, feedSet] of Object.entries(feeds)) {
             if (feedSet.size === 0) continue;
 
@@ -682,7 +789,6 @@
             return arrowMaterialsMap.get(key);
         }
 
-        // Drugi przebieg: Tworzenie właściwej geometrii 3D
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -712,8 +818,77 @@
                 const rad = (curQ + 90) * (Math.PI / 180);
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
-                const arrowHelper = new THREE.ArrowHelper(dir, origin, globalVectorLength, 0xff0055, globalVectorLength * 0.4, globalVectorLength * 0.3);
-                arrowHelper.userData = { lineIndex: i }; qArrowsGroup.add(arrowHelper);
+                
+                const vLen = getVectorLength();
+                const vThick = getVectorThickness();
+                const vHead = getVectorHeadSize();
+                const endPt = origin.clone().add(dir.clone().multiplyScalar(vLen));
+
+                const shaftGeom = new THREE.LineGeometry();
+                shaftGeom.setPositions([origin.x, origin.y, origin.z, endPt.x, endPt.y, endPt.z]);
+                const shaftMat = new THREE.LineMaterial({ color: 0xff0055, linewidth: vThick, resolution: res });
+                allVectorMaterials.push(shaftMat);
+                const shaftLine = new THREE.Line2(shaftGeom, shaftMat);
+                shaftLine.computeLineDistances();
+
+                const headMesh = new THREE.Mesh(arrowheadGeometry, new THREE.MeshBasicMaterial({ color: 0xff0055 }));
+                headMesh.position.copy(endPt);
+                headMesh.quaternion.setFromUnitVectors(arrowAxis, dir);
+                headMesh.scale.setScalar(vHead);
+
+                const qGroup = new THREE.Group();
+                qGroup.userData = { lineIndex: i, origin: origin, dir: dir };
+                qGroup.add(shaftLine);
+                qGroup.add(headMesh);
+                qArrowsGroup.add(qGroup);
+
+                if (prevQ !== curQ && Math.max(prevZ, curZ) > materialThickness) {
+                    const radStart = (prevQ + 90) * (Math.PI / 180);
+                    const radEnd = (curQ + 90) * (Math.PI / 180);
+                    const radius = vLen * 0.6; 
+                    const segments = 24;
+                    const angleDiff = radEnd - radStart;
+                    const arcPoints = [];
+
+                    for (let s = 0; s <= segments; s++) {
+                        const a = radStart + (angleDiff * (s / segments));
+                        arcPoints.push(curX + Math.cos(a) * radius, curY + Math.sin(a) * radius, curZ);
+                    }
+
+                    const arcGeom = new THREE.LineGeometry();
+                    arcGeom.setPositions(arcPoints);
+                    const arcMat = new THREE.LineMaterial({
+                        color: 0x00a859, 
+                        linewidth: getRotationThickness(),
+                        resolution: res,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    allRotationMaterials.push(arcMat);
+
+                    const arcLine = new THREE.Line2(arcGeom, arcMat);
+                    arcLine.computeLineDistances();
+
+                    const n = arcPoints.length;
+                    const pEnd = new THREE.Vector3(arcPoints[n - 3], arcPoints[n - 2], arcPoints[n - 1]);
+                    const pPrev = new THREE.Vector3(arcPoints[n - 6], arcPoints[n - 5], arcPoints[n - 4]);
+                    const tangent = pEnd.clone().sub(pPrev);
+                    
+                    const rotGroup = new THREE.Group();
+                    rotGroup.userData = { lineIndex: i, center: new THREE.Vector3(curX, curY, curZ), radStart: radStart, radEnd: radEnd };
+                    rotGroup.add(arcLine);
+
+                    if (tangent.lengthSq() > 1e-12) {
+                        tangent.normalize();
+                        const arcHead = new THREE.Mesh(arrowheadGeometry, new THREE.MeshBasicMaterial({ color: 0x00a859 }));
+                        arcHead.position.copy(pEnd);
+                        arcHead.quaternion.setFromUnitVectors(arrowAxis, tangent);
+                        arcHead.scale.setScalar(getRotationHeadSize());
+                        rotGroup.add(arcHead);
+                    }
+                    
+                    qRotationsGroup.add(rotGroup);
+                }
             }
 
             minX = Math.min(minX, curX); maxX = Math.max(maxX, curX);
@@ -858,6 +1033,7 @@
     }
 
     document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
+    document.getElementById('toggle-knife-rotation').addEventListener('change', (e) => qRotationsGroup.visible = e.target.checked );
 
     let fileHandle = null;
     const loadFileBtn = document.getElementById('load-file-btn');
