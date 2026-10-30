@@ -194,7 +194,8 @@ var sequenceNumber = 0;
 
 var KNIFE_OFFSET_RAD = -Math.PI / 2.0;
 
-var c_rad = KNIFE_OFFSET_RAD; 
+//var c_rad = KNIFE_OFFSET_RAD; 
+var c_rad = 0;
 var isRapid = false;
 var isProcessingArc = false; // Flag to determine if current line is part of a linearized arc
 
