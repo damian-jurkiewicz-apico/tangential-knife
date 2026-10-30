@@ -1022,7 +1022,7 @@
         if (minX !== Infinity) {
             currentTarget.set((minX + maxX) / 2, (minY + maxY) / 2, (minZ + maxZ) / 2);
             defaultDistance = Math.max(maxX - minX, maxY - minY, 50) * 1.5;
-            setView('home');
+            setView('top');
             document.getElementById('stat-points').innerText = pointsCount;
             document.getElementById('stat-rotations').innerText = rotations;
             document.getElementById('stat-f').innerText = `${minF.toFixed(0)} / ${maxF.toFixed(0)}`;
