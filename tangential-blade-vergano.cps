@@ -358,7 +358,7 @@ function onSection() {
     initialSafeZDone = true;
   }
 
-  c_rad = KNIFE_OFFSET_RAD;
+  //c_rad = KNIFE_OFFSET_RAD;
   feedOutput.reset();
 }
 
