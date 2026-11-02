@@ -733,6 +733,10 @@
             // Czy w linii występują jakiekolwiek słowa osi/łuku (X, Y, Z, I, J)?
             const scanHasAxisWords = !!(xMatch || yMatch || zMatch || /I[-+]?[0-9]*\.?[0-9]+/.test(line) || /J[-+]?[0-9]*\.?[0-9]+/.test(line));
 
+            // Q = linia z Q1 bez X i Y, wykonywana nad materiałem (Z powyżej progu Panel Height)
+            const scanIsQ = !!qMatch && !xMatch && !yMatch && isAirMove(scanZ, scanZ);
+            if (scanIsQ) feeds.Q.add(`${tempF}|${scanZ}`);
+
             if (scanMode !== 'G00') {
                 minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF);
                 const isAir = isAirMove(prevZ, scanZ);
@@ -742,7 +746,7 @@
 
                 const f_z_key = `${tempF}|${scanZ}`;
 
-                if (changedQ && !hasMovement && !scanHasAxisWords) feeds.Q.add(f_z_key); // Q = wyłącznie zmiana Q1, linia bez słów X/Y/Z/I/J
+                if (scanIsQ) { /* już dodane do feeds.Q */ }
                 else if (hasMovement) {
                     if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(f_z_key);
                     else if (changedZ && scanZ > prevZ) feeds.LIFT.add(f_z_key);
@@ -819,10 +823,10 @@
         }
 
         // Klasyfikacja ruchu (ta sama logika dla geometrii ścieżki i strzałek noża)
-        function classifyMove(pX, pY, pZ, pQ, cX, cY, cZ, cQ, mode, axisWords) {
+        function classifyMove(pX, pY, pZ, pQ, cX, cY, cZ, cQ, mode, isQLine) {
             const chX = pX !== cX, chY = pY !== cY, chZ = pZ !== cZ, chQ = pQ !== cQ;
             const hasMov = chX || chY || chZ;
-            if (chQ && !hasMov && !axisWords) return 'Q';
+            if (isQLine) return 'Q';
             if (!hasMov) return 'FEED_XY';
             if (chZ && cZ < pZ) return 'PLUNGE';
             if (chZ && cZ > pZ) return 'LIFT';
@@ -859,7 +863,7 @@
 
             if (qMatch) {
                 curQ = parseFloat(qMatch[1]); rotations++;
-                const arrowGroupKey = `${classifyMove(prevX, prevY, prevZ, prevQ, curX, curY, curZ, curQ, motionMode, hasAxisWords)}_${curF}_${curZ}`;
+                const arrowGroupKey = `${classifyMove(prevX, prevY, prevZ, prevQ, curX, curY, curZ, curQ, motionMode, (!xMatch && !yMatch && isAirMove(curZ, curZ)))}_${curF}_${curZ}`;
                 const rad = (curQ + 90) * (Math.PI / 180);
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
@@ -948,7 +952,7 @@
             let mat, targetGroup;
 
             let category = 'FEED_XY';
-            if (changedQ && !hasMovement && !hasAxisWords) {
+            if (qMatch && !xMatch && !yMatch && isAirMove(curZ, curZ)) {
                 category = 'Q';
             } else if (hasMovement) {
                 if (changedZ && curZ < prevZ) category = 'PLUNGE';
@@ -967,7 +971,7 @@
             // Modyfikacja docelowego klucza grupującego uwzględniającego F oraz Z
             const groupKey = `${category}_${curF}_${curZ}`;
             
-            if (category === 'Q' || !hasMovement) {
+            if (!hasMovement) {
                 targetGroup = airGroup;
             } else {
                 targetGroup = feedGroupsMap.get(groupKey) || airGroup;
