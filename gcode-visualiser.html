@@ -95,7 +95,7 @@
     <div class="panel-section">
         <h2>Display Options</h2>
         <div id="feedrate-checkboxes" style="margin-bottom: 8px;">
-            <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F):</div>
+            <div style="font-size: 12px; color: #888; margin-bottom: 4px;">Cutting Moves by Feed (F) & Z:</div>
         </div>
         <hr style="border: 0; border-top: 1px solid #333; margin: 8px 0;">
 
@@ -690,6 +690,7 @@
         let scanMode = 'G01';
         let scanX = 0, scanY = 0, scanZ = 0, scanQ = 0;
 
+        // Pierwsza pętla: Zbieranie kluczy w formacie Feed|Z
         for (let i = 0; i < lines.length; i++) {
             let line = lines[i].trim().toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -721,27 +722,30 @@
                 const changedZ = prevZ !== scanZ; const changedQ = prevQ !== scanQ;
                 const hasMovement = changedX || changedY || changedZ;
 
-                if (changedQ && !hasMovement) feeds.Q.add(tempF);
+                const f_z_key = `${tempF}|${scanZ}`;
+
+                if (changedQ && !hasMovement) feeds.Q.add(f_z_key);
                 else if (hasMovement) {
-                    if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(tempF);
-                    else if (changedZ && scanZ > prevZ) feeds.LIFT.add(tempF);
-                    else if (isAir) feeds.AIR.add(tempF);
+                    if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(f_z_key);
+                    else if (changedZ && scanZ > prevZ) feeds.LIFT.add(f_z_key);
+                    else if (isAir) feeds.AIR.add(f_z_key);
                     else {
                         const segmentLen = Math.hypot(scanX - prevX, scanY - prevY);
                         if (segmentLen < contactLength) {
-                            feeds.SHORT_SEGMENTS.add(tempF);
+                            feeds.SHORT_SEGMENTS.add(f_z_key);
                         } else {
-                            feeds.FEED_XY.add(tempF);
+                            feeds.FEED_XY.add(f_z_key);
                         }
                     }
                 }
             }
         }
-        if (minF === Infinity) { minF = 0; maxF = 1000; feeds.FEED_XY.add(1000); }
+        if (minF === Infinity) { minF = 0; maxF = 1000; feeds.FEED_XY.add(`1000|0`); }
 
         const feedContainer = document.getElementById('feedrate-checkboxes');
         feedContainer.innerHTML = '';
 
+        // Generowanie interfejsu z podziałem F i Z
         for (const [category, feedSet] of Object.entries(feeds)) {
             if (feedSet.size === 0) continue;
 
@@ -750,8 +754,14 @@
             catLabel.innerText = category === 'SHORT_SEGMENTS' ? 'Move Type - FEED_XY (Too Short):' : `Move Type - ${category}:`;
             feedContainer.appendChild(catLabel);
 
-            Array.from(feedSet).sort((a, b) => a - b).forEach((fVal) => {
-                const groupKey = `${category}_${fVal}`;
+            Array.from(feedSet).sort((a, b) => {
+                const [fA, zA] = a.split('|').map(Number);
+                const [fB, zB] = b.split('|').map(Number);
+                if (fA !== fB) return fA - fB;
+                return zA - zB; // Drugorzędne sortowanie po Z
+            }).forEach((val) => {
+                const [fVal, zVal] = val.split('|');
+                const groupKey = `${category}_${fVal}_${zVal}`;
                 const grp = new THREE.Group();
                 scene.add(grp);
                 feedGroupsMap.set(groupKey, grp);
@@ -761,7 +771,7 @@
 
                 const lbl = document.createElement('label');
                 lbl.className = 'checkbox-container';
-                lbl.innerHTML = `<input type="checkbox" checked data-group="${groupKey}"> <span class="feed-color-badge" style="background:${hexColor}"></span> F${fVal}`;
+                lbl.innerHTML = `<input type="checkbox" checked data-group="${groupKey}"> <span class="feed-color-badge" style="background:${hexColor}"></span> F${fVal}-Z${zVal}`;
 
                 lbl.querySelector('input').addEventListener('change', (e) => {
                     const targetGrp = e.target.getAttribute('data-group');
@@ -789,6 +799,7 @@
             return arrowMaterialsMap.get(key);
         }
 
+        // Druga pętla: Generowanie geometrii i rozdzielanie jej po kluczu F_Z
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
             if (line.startsWith('(') || line.startsWith(';') || line === '') continue;
@@ -919,7 +930,8 @@
                 }
             }
 
-            const groupKey = `${category}_${curF}`;
+            // Modyfikacja docelowego klucza grupującego uwzględniającego F oraz Z
+            const groupKey = `${category}_${curF}_${curZ}`;
             
             if (category === 'Q' || !hasMovement) {
                 targetGroup = airGroup;
