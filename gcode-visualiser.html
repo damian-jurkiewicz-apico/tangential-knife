@@ -636,8 +636,23 @@
             });
         };
         feedGroupsMap.forEach(grp => processGroup(grp));
-        processGroup(airGroup); processGroup(qArrowsGroup);
-        processGroup(qRotationsGroup);
+        processGroup(airGroup);
+
+        // Strzałki noża: widoczne tylko gdy linia mieści się w zakresie ORAZ
+        // odpowiadający jej filtr Move Type (Feed/Z) jest włączony.
+        // Globalne przełączniki (Show Knife Orientation / Rotation) działają na poziomie całej grupy.
+        const processKnifeGroup = (group) => {
+            group.children.forEach(child => {
+                const ud = child.userData;
+                if (!ud || ud.lineIndex === undefined) return;
+                const inRange = (ud.lineIndex >= minLine && ud.lineIndex <= maxLine);
+                const feedGrp = ud.groupKey ? feedGroupsMap.get(ud.groupKey) : null;
+                const filterOn = feedGrp ? feedGrp.visible : true;
+                child.visible = inRange && filterOn;
+            });
+        };
+        processKnifeGroup(qArrowsGroup);
+        processKnifeGroup(qRotationsGroup);
     }
 
     window.addEventListener('resize', () => {
@@ -715,6 +730,9 @@
             if (zMatch) scanZ = parseFloat(zMatch[1]);
             if (qMatch) scanQ = parseFloat(qMatch[1]);
 
+            // Czy w linii występują jakiekolwiek słowa osi/łuku (X, Y, Z, I, J)?
+            const scanHasAxisWords = !!(xMatch || yMatch || zMatch || /I[-+]?[0-9]*\.?[0-9]+/.test(line) || /J[-+]?[0-9]*\.?[0-9]+/.test(line));
+
             if (scanMode !== 'G00') {
                 minF = Math.min(minF, tempF); maxF = Math.max(maxF, tempF);
                 const isAir = isAirMove(prevZ, scanZ);
@@ -724,7 +742,7 @@
 
                 const f_z_key = `${tempF}|${scanZ}`;
 
-                if (changedQ && !hasMovement) feeds.Q.add(f_z_key);
+                if (changedQ && !hasMovement && !scanHasAxisWords) feeds.Q.add(f_z_key); // Q = wyłącznie zmiana Q1, linia bez słów X/Y/Z/I/J
                 else if (hasMovement) {
                     if (changedZ && scanZ < prevZ) feeds.PLUNGE.add(f_z_key);
                     else if (changedZ && scanZ > prevZ) feeds.LIFT.add(f_z_key);
@@ -776,6 +794,7 @@
                 lbl.querySelector('input').addEventListener('change', (e) => {
                     const targetGrp = e.target.getAttribute('data-group');
                     if (feedGroupsMap.has(targetGrp)) feedGroupsMap.get(targetGrp).visible = e.target.checked;
+                    updateSliderUI(); // przelicza widoczność strzałek noża (zakres linii + filtr Move Type)
                 });
                 feedContainer.appendChild(lbl);
             });
@@ -799,6 +818,18 @@
             return arrowMaterialsMap.get(key);
         }
 
+        // Klasyfikacja ruchu (ta sama logika dla geometrii ścieżki i strzałek noża)
+        function classifyMove(pX, pY, pZ, pQ, cX, cY, cZ, cQ, mode, axisWords) {
+            const chX = pX !== cX, chY = pY !== cY, chZ = pZ !== cZ, chQ = pQ !== cQ;
+            const hasMov = chX || chY || chZ;
+            if (chQ && !hasMov && !axisWords) return 'Q';
+            if (!hasMov) return 'FEED_XY';
+            if (chZ && cZ < pZ) return 'PLUNGE';
+            if (chZ && cZ > pZ) return 'LIFT';
+            if (isAirMove(pZ, cZ) || mode === 'G00') return 'AIR';
+            return Math.hypot(cX - pX, cY - pY) < contactLength ? 'SHORT_SEGMENTS' : 'FEED_XY';
+        }
+
         // Druga pętla: Generowanie geometrii i rozdzielanie jej po kluczu F_Z
         for (let i = 0; i < lines.length; i++) {
             let originalLine = lines[i].trim(); let line = originalLine.toUpperCase();
@@ -819,6 +850,8 @@
             const iMatch = line.match(/I([-+]?[0-9]*\.?[0-9]+)/);
             const jMatch = line.match(/J([-+]?[0-9]*\.?[0-9]+)/);
 
+            const hasAxisWords = !!(xMatch || yMatch || zMatch || iMatch || jMatch);
+
             if (xMatch) curX = parseFloat(xMatch[1]);
             if (yMatch) curY = parseFloat(yMatch[1]);
             if (zMatch) curZ = parseFloat(zMatch[1]);
@@ -826,6 +859,7 @@
 
             if (qMatch) {
                 curQ = parseFloat(qMatch[1]); rotations++;
+                const arrowGroupKey = `${classifyMove(prevX, prevY, prevZ, prevQ, curX, curY, curZ, curQ, motionMode, hasAxisWords)}_${curF}_${curZ}`;
                 const rad = (curQ + 90) * (Math.PI / 180);
                 const dir = new THREE.Vector3(Math.cos(rad), Math.sin(rad), 0);
                 const origin = new THREE.Vector3(curX, curY, curZ);
@@ -848,7 +882,7 @@
                 headMesh.scale.setScalar(vHead);
 
                 const qGroup = new THREE.Group();
-                qGroup.userData = { lineIndex: i, origin: origin, dir: dir };
+                qGroup.userData = { lineIndex: i, origin: origin, dir: dir, groupKey: arrowGroupKey };
                 qGroup.add(shaftLine);
                 qGroup.add(headMesh);
                 qArrowsGroup.add(qGroup);
@@ -886,7 +920,7 @@
                     const tangent = pEnd.clone().sub(pPrev);
                     
                     const rotGroup = new THREE.Group();
-                    rotGroup.userData = { lineIndex: i, center: new THREE.Vector3(curX, curY, curZ), radStart: radStart, radEnd: radEnd };
+                    rotGroup.userData = { lineIndex: i, center: new THREE.Vector3(curX, curY, curZ), radStart: radStart, radEnd: radEnd, groupKey: arrowGroupKey };
                     rotGroup.add(arcLine);
 
                     if (tangent.lengthSq() > 1e-12) {
@@ -914,7 +948,7 @@
             let mat, targetGroup;
 
             let category = 'FEED_XY';
-            if (changedQ && !hasMovement) {
+            if (changedQ && !hasMovement && !hasAxisWords) {
                 category = 'Q';
             } else if (hasMovement) {
                 if (changedZ && curZ < prevZ) category = 'PLUNGE';
