@@ -64,6 +64,37 @@
 
         #toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); background: #2d8a4e; color: white; padding: 10px 20px; border-radius: 4px; font-size: 14px; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: none; opacity: 0; transition: opacity 0.3s ease; z-index: 1000; }
         .toast-visible { opacity: 1 !important; }
+		
+		.knife-mode-group {
+            display: flex;
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 4px;
+            padding: 2px;
+            gap: 2px;
+            margin-bottom: 12px;
+        }
+        .mode-btn {
+            flex: 1;
+            background: transparent;
+            border: none;
+            color: #888;
+            padding: 6px 2px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: all 0.15s ease;
+            text-align: center;
+        }
+        .mode-btn:hover {
+            color: #fff;
+            background: #2a2a2a;
+        }
+        .mode-btn.active {
+            background: #0e639c;
+            color: #ffffff;
+        }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -130,13 +161,12 @@
             </div>
         </div>
 
-        <label class="checkbox-container" style="margin-bottom: 12px;">
-            <input type="checkbox" id="toggle-knife-orientation" checked> Show Knife Orientation (Q1)
-        </label>
-        
-        <label class="checkbox-container" style="margin-bottom: 12px;">
-            <input type="checkbox" id="toggle-knife-rotation" checked> Show Knife Rotation (Arc)
-        </label>
+		<div style="font-size: 12px; color: #888; margin-bottom: 4px; font-weight: bold;">Knife Visualisation:</div>
+        <div class="knife-mode-group" id="knife-mode-selector">
+            <button type="button" class="mode-btn active" data-mode="both">Both</button>
+            <button type="button" class="mode-btn" data-mode="orientation">Q1 Vector</button>
+            <button type="button" class="mode-btn" data-mode="rotation">Rotation Arc</button>
+        </div>
     </div>
 
     <div class="panel-section">
@@ -1082,8 +1112,17 @@
         }
     }
 
-    document.getElementById('toggle-knife-orientation').addEventListener('change', (e) => qArrowsGroup.visible = e.target.checked );
-    document.getElementById('toggle-knife-rotation').addEventListener('change', (e) => qRotationsGroup.visible = e.target.checked );
+const knifeButtons = document.querySelectorAll('#knife-mode-selector .mode-btn');
+    knifeButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            knifeButtons.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+
+            const mode = btn.dataset.mode;
+            qArrowsGroup.visible = (mode === 'both' || mode === 'orientation');
+            qRotationsGroup.visible = (mode === 'both' || mode === 'rotation');
+        });
+    });
 
     let fileHandle = null;
     const loadFileBtn = document.getElementById('load-file-btn');
