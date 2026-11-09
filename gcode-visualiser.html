@@ -9,6 +9,13 @@
         body { display: flex; height: 100vh; background-color: #1a1a1a; color: #ccc; overflow: hidden; }
         #sidebar { width: 320px; background: #252526; display: flex; flex-direction: column; border-right: 1px solid #333; z-index: 10; overflow-y: auto; }
         .panel-section { padding: 15px; border-bottom: 1px solid #333; }
+
+        .adv-card { background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 14px 14px 10px; margin-top: 12px; }
+        .adv-card h3 { font-size: 12px; color: #4ec9b0; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 12px; font-weight: 700; }
+        .adv-row { margin-bottom: 10px; }
+        .adv-row .adv-label { display: flex; justify-content: space-between; font-size: 12px; color: #aaa; }
+        .adv-row .adv-label span { color: #4ec9b0; }
+        .adv-row input[type="range"] { width: 100%; margin-top: 4px; }
         h2 { font-size: 16px; color: #fff; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
         input[type="file"] { display: none; }
         .btn { display: block; width: 100%; padding: 10px; background: #0e639c; color: white; text-align: center; border-radius: 4px; cursor: pointer; font-weight: bold; border: none; transition: background 0.2s; }
@@ -197,30 +204,53 @@
             <summary style="cursor: pointer; color: #fff; font-weight: bold; font-size: 13px; user-select: none; background: #333; padding: 6px; border-radius: 4px;">
                 Advanced Options
             </summary>
-            <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 12px; padding: 0 5px;">
-                <div>
-                    <label for="vector-length-slider" style="font-size: 12px; color: #aaa;">Knife Vector Length: <span id="vector-length-val" style="color:#4ec9b0;">50%</span></label>
-                    <input type="range" id="vector-length-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
+            <div class="adv-card">
+                <h3>Toolpath Lines &amp; Markers</h3>
+                <div class="adv-row">
+                    <label for="feed-thickness-slider" class="adv-label">Cutting Path (Feed): <span id="feed-thickness-slider-val">2 px</span></label>
+                    <input type="range" id="feed-thickness-slider" min="0.5" max="4" step="0.5" value="2" data-unit=" px">
                 </div>
-                <div>
-                    <label for="vector-size-slider" style="font-size: 12px; color: #aaa;">Knife Vector Size: <span id="vector-size-val" style="color:#4ec9b0;">50%</span></label>
-                    <input type="range" id="vector-size-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
+                <div class="adv-row">
+                    <label for="air-thickness-slider" class="adv-label">Idle / Rapid (Air): <span id="air-thickness-slider-val">2 px</span></label>
+                    <input type="range" id="air-thickness-slider" min="0.5" max="4" step="0.5" value="2" data-unit=" px">
                 </div>
-                <div>
-                    <label for="rotation-size-slider" style="font-size: 12px; color: #aaa;">Rotation Arrow Size: <span id="rotation-size-val" style="color:#4ec9b0;">50%</span></label>
-                    <input type="range" id="rotation-size-slider" min="1" max="100" value="50" style="width: 100%; margin-top: 4px;">
+                <div class="adv-row">
+                    <label for="short-thickness-slider" class="adv-label">Short Segments Path: <span id="short-thickness-slider-val">3 px</span></label>
+                    <input type="range" id="short-thickness-slider" min="0.5" max="8" step="0.5" value="3" data-unit=" px">
                 </div>
-                <div>
-                    <label for="arrow-size-slider" style="font-size: 12px; color: #aaa;">Path Arrowhead Size: <span id="arrow-size-val" style="color:#4ec9b0;">8</span></label>
-                    <input type="range" id="arrow-size-slider" min="1" max="40" value="8" style="width: 100%; margin-top: 4px;">
+                <div class="adv-row">
+                    <label for="arrow-size-slider" class="adv-label">Path Arrowhead Size: <span id="arrow-size-slider-val">8</span></label>
+                    <input type="range" id="arrow-size-slider" min="1" max="20" step="1" value="8" data-unit="">
                 </div>
-                <div>
-                    <label for="feed-thickness-slider" style="font-size: 12px; color: #aaa;">Cutting Path Thickness (Feed): <span id="feed-thickness-val" style="color:#4ec9b0;">2</span></label>
-                    <input type="range" id="feed-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
+            </div>
+            <div class="adv-card">
+                <h3>Knife Vector (Q1 Orientation)</h3>
+                <div class="adv-row">
+                    <label for="vector-length-slider" class="adv-label">Vector Length: <span id="vector-length-slider-val">55 mm</span></label>
+                    <input type="range" id="vector-length-slider" min="5" max="150" step="1" value="55" data-unit=" mm">
                 </div>
-                <div>
-                    <label for="air-thickness-slider" style="font-size: 12px; color: #aaa;">Idle Path Thickness (Air): <span id="air-thickness-val" style="color:#4ec9b0;">2</span></label>
-                    <input type="range" id="air-thickness-slider" min="1" max="5" value="2" style="width: 100%; margin-top: 4px;">
+                <div class="adv-row">
+                    <label for="vector-thickness-slider" class="adv-label">Vector Thickness: <span id="vector-thickness-slider-val">3 px</span></label>
+                    <input type="range" id="vector-thickness-slider" min="1" max="10" step="0.5" value="3" data-unit=" px">
+                </div>
+                <div class="adv-row">
+                    <label for="vector-head-slider" class="adv-label">Arrowhead Scale: <span id="vector-head-slider-val">10</span></label>
+                    <input type="range" id="vector-head-slider" min="1" max="30" step="1" value="10" data-unit="">
+                </div>
+            </div>
+            <div class="adv-card">
+                <h3>Knife Rotation Arc (Q Transitions)</h3>
+                <div class="adv-row">
+                    <label for="arc-radius-slider" class="adv-label">Arc Radius: <span id="arc-radius-slider-val">30 mm</span></label>
+                    <input type="range" id="arc-radius-slider" min="5" max="150" step="1" value="30" data-unit=" mm">
+                </div>
+                <div class="adv-row">
+                    <label for="arc-thickness-slider" class="adv-label">Arc Thickness: <span id="arc-thickness-slider-val">3 px</span></label>
+                    <input type="range" id="arc-thickness-slider" min="1" max="10" step="0.5" value="3" data-unit=" px">
+                </div>
+                <div class="adv-row">
+                    <label for="arc-head-slider" class="adv-label">Arrowhead Scale: <span id="arc-head-slider-val">10</span></label>
+                    <input type="range" id="arc-head-slider" min="1" max="30" step="1" value="10" data-unit="">
                 </div>
             </div>
         </details>
@@ -293,19 +323,29 @@
     let globalAirThickness = 2;
     let globalArrowSize = 8;
 
-    let globalVectorPercent = 50;
-    let globalVectorSizePercent = 50;
-    let globalRotationPercent = 50;
-    
-    function getVectorLength() { return 10 + (globalVectorPercent / 100) * 90; }
-    function getVectorThickness() { return 1 + (globalVectorSizePercent / 100) * 5; }
-    function getVectorHeadSize() { return 3 + (globalVectorSizePercent / 100) * 15; }
+    let globalShortThickness = 3;
 
-    function getRotationThickness() { return 1 + (globalRotationPercent / 100) * 5; }
-    function getRotationHeadSize() { return 3 + (globalRotationPercent / 100) * 15; }
+    // Knife vector (Q1 orientation) - mm / px / head scale
+    let globalVectorLength = 55;
+    let globalVectorThickness = 3;
+    let globalVectorHead = 10;
+
+    // Knife rotation arc (Q transitions) - mm / px / head scale
+    let globalArcRadius = 30;
+    let globalArcThickness = 3;
+    let globalArcHead = 10;
+
+    function getVectorLength() { return globalVectorLength; }
+    function getVectorThickness() { return globalVectorThickness; }
+    function getVectorHeadSize() { return globalVectorHead; }
+
+    function getArcRadius() { return globalArcRadius; }
+    function getRotationThickness() { return globalArcThickness; }
+    function getRotationHeadSize() { return globalArcHead; }
 
     let allFeedMaterials = [];
     let allAirMaterials = [];
+    let allShortMaterials = [];
     let lineArrowheads = [];
     let allVectorMaterials = [];
     let allRotationMaterials = [];
@@ -520,122 +560,84 @@
         });
     });
 
-    const vectorLengthSlider = document.getElementById('vector-length-slider');
-    const vectorLengthVal = document.getElementById('vector-length-val');
-    vectorLengthSlider.addEventListener('input', (e) => {
-        globalVectorPercent = parseFloat(e.target.value);
-        vectorLengthVal.innerText = globalVectorPercent + "%";
-        
+    // Helper: binds a slider to a callback and keeps the value label (with unit) in sync
+    function bindSlider(id, onChange) {
+        const el = document.getElementById(id);
+        const label = document.getElementById(id + '-val');
+        const unit = el.dataset.unit || '';
+        el.addEventListener('input', () => {
+            const v = parseFloat(el.value);
+            label.innerText = v + unit;
+            onChange(v);
+        });
+    }
+
+    function rebuildQArrows() {
         const vLen = getVectorLength();
-        
         qArrowsGroup.children.forEach(grp => {
             if (grp.userData.origin && grp.userData.dir) {
                 const origin = grp.userData.origin;
-                const dir = grp.userData.dir;
-                const endPt = origin.clone().add(dir.clone().multiplyScalar(vLen));
-                
+                const endPt = origin.clone().add(grp.userData.dir.clone().multiplyScalar(vLen));
                 const line = grp.children[0];
                 if (line && line.geometry && line.geometry.setPositions) {
                     line.geometry.setPositions([origin.x, origin.y, origin.z, endPt.x, endPt.y, endPt.z]);
                     line.computeLineDistances();
                 }
-                
                 const head = grp.children[1];
-                if (head) {
-                    head.position.copy(endPt);
-                }
+                if (head) head.position.copy(endPt);
             }
         });
+    }
 
+    function rebuildQArcs() {
+        const radius = getArcRadius();
         qRotationsGroup.children.forEach(grp => {
-            if (grp.userData.center) {
-                const radius = vLen * 0.6;
-                const c = grp.userData.center;
-                const rStart = grp.userData.radStart;
-                const rEnd = grp.userData.radEnd;
-                const segments = 24;
-                const angleDiff = rEnd - rStart;
-                const arcPoints = [];
-                for (let s = 0; s <= segments; s++) {
-                    const a = rStart + (angleDiff * (s / segments));
-                    arcPoints.push(c.x + Math.cos(a) * radius, c.y + Math.sin(a) * radius, c.z);
-                }
-                
-                const line = grp.children[0];
-                if (line && line.geometry && line.geometry.setPositions) {
-                    line.geometry.setPositions(arcPoints);
-                    line.computeLineDistances();
-                }
-                
-                const head = grp.children[1];
-                if (head) {
-                    const n = arcPoints.length;
-                    const pEnd = new THREE.Vector3(arcPoints[n-3], arcPoints[n-2], arcPoints[n-1]);
-                    const pPrev = new THREE.Vector3(arcPoints[n-6], arcPoints[n-5], arcPoints[n-4]);
-                    head.position.copy(pEnd);
-                    head.quaternion.setFromUnitVectors(arrowAxis, pEnd.clone().sub(pPrev).normalize());
-                }
+            if (!grp.userData.center) return;
+            const c = grp.userData.center;
+            const rStart = grp.userData.radStart;
+            const angleDiff = grp.userData.radEnd - rStart;
+            const segments = 24;
+            const arcPoints = [];
+            for (let s = 0; s <= segments; s++) {
+                const a = rStart + (angleDiff * (s / segments));
+                arcPoints.push(c.x + Math.cos(a) * radius, c.y + Math.sin(a) * radius, c.z);
             }
-        });
-    });
-
-    const vectorSizeSlider = document.getElementById('vector-size-slider');
-    const vectorSizeVal = document.getElementById('vector-size-val');
-    vectorSizeSlider.addEventListener('input', (e) => {
-        globalVectorSizePercent = parseFloat(e.target.value);
-        vectorSizeVal.innerText = globalVectorSizePercent + "%";
-        
-        const vThick = getVectorThickness();
-        const vHead = getVectorHeadSize();
-
-        allVectorMaterials.forEach(mat => mat.linewidth = vThick);
-        
-        qArrowsGroup.children.forEach(grp => {
+            const line = grp.children[0];
+            if (line && line.geometry && line.geometry.setPositions) {
+                line.geometry.setPositions(arcPoints);
+                line.computeLineDistances();
+            }
             const head = grp.children[1];
             if (head) {
-                head.scale.setScalar(vHead);
+                const n = arcPoints.length;
+                const pEnd = new THREE.Vector3(arcPoints[n-3], arcPoints[n-2], arcPoints[n-1]);
+                const pPrev = new THREE.Vector3(arcPoints[n-6], arcPoints[n-5], arcPoints[n-4]);
+                head.position.copy(pEnd);
+                head.quaternion.setFromUnitVectors(arrowAxis, pEnd.clone().sub(pPrev).normalize());
             }
         });
+    }
+
+    // --- Toolpath lines & markers ---
+    bindSlider('feed-thickness-slider', v => { globalFeedThickness = v; allFeedMaterials.forEach(m => m.linewidth = v); });
+    bindSlider('air-thickness-slider',  v => { globalAirThickness = v;  allAirMaterials.forEach(m => m.linewidth = v); });
+    bindSlider('short-thickness-slider', v => { globalShortThickness = v; allShortMaterials.forEach(m => m.linewidth = v); });
+    bindSlider('arrow-size-slider',     v => { globalArrowSize = v; lineArrowheads.forEach(h => h.scale.setScalar(v)); });
+
+    // --- Knife vector (Q1 orientation) ---
+    bindSlider('vector-length-slider', v => { globalVectorLength = v; rebuildQArrows(); });
+    bindSlider('vector-thickness-slider', v => { globalVectorThickness = v; allVectorMaterials.forEach(m => m.linewidth = v); });
+    bindSlider('vector-head-slider', v => {
+        globalVectorHead = v;
+        qArrowsGroup.children.forEach(grp => { const h = grp.children[1]; if (h) h.scale.setScalar(v); });
     });
 
-    const rotationSizeSlider = document.getElementById('rotation-size-slider');
-    const rotationSizeVal = document.getElementById('rotation-size-val');
-    rotationSizeSlider.addEventListener('input', (e) => {
-        globalRotationPercent = parseFloat(e.target.value);
-        rotationSizeVal.innerText = globalRotationPercent + "%";
-        
-        const rThick = getRotationThickness();
-        const rHead = getRotationHeadSize();
-
-        allRotationMaterials.forEach(mat => mat.linewidth = rThick);
-        qRotationsGroup.children.forEach(grp => {
-            const head = grp.children[1];
-            if (head) head.scale.setScalar(rHead);
-        });
-    });
-
-    const arrowSizeSlider = document.getElementById('arrow-size-slider');
-    const arrowSizeVal = document.getElementById('arrow-size-val');
-    arrowSizeSlider.addEventListener('input', (e) => {
-        globalArrowSize = parseFloat(e.target.value);
-        arrowSizeVal.innerText = globalArrowSize;
-        lineArrowheads.forEach(head => head.scale.setScalar(globalArrowSize));
-    });
-
-    const feedThicknessSlider = document.getElementById('feed-thickness-slider');
-    const feedThicknessVal = document.getElementById('feed-thickness-val');
-    feedThicknessSlider.addEventListener('input', (e) => {
-        globalFeedThickness = parseFloat(e.target.value);
-        feedThicknessVal.innerText = globalFeedThickness;
-        allFeedMaterials.forEach(mat => mat.linewidth = globalFeedThickness);
-    });
-
-    const airThicknessSlider = document.getElementById('air-thickness-slider');
-    const airThicknessVal = document.getElementById('air-thickness-val');
-    airThicknessSlider.addEventListener('input', (e) => {
-        globalAirThickness = parseFloat(e.target.value);
-        airThicknessVal.innerText = globalAirThickness;
-        allAirMaterials.forEach(mat => mat.linewidth = globalAirThickness);
+    // --- Knife rotation arc (Q transitions) ---
+    bindSlider('arc-radius-slider', v => { globalArcRadius = v; rebuildQArcs(); });
+    bindSlider('arc-thickness-slider', v => { globalArcThickness = v; allRotationMaterials.forEach(m => m.linewidth = v); });
+    bindSlider('arc-head-slider', v => {
+        globalArcHead = v;
+        qRotationsGroup.children.forEach(grp => { const h = grp.children[1]; if (h) h.scale.setScalar(v); });
     });
 
     const rangeStartInput = document.getElementById('range-start');
@@ -693,6 +695,7 @@
         const res = new THREE.Vector2(wrapper.clientWidth, wrapper.clientHeight);
         if (highlightMaterial) highlightMaterial.resolution.copy(res);
         allFeedMaterials.forEach(mat => mat.resolution.copy(res));
+        allShortMaterials.forEach(mat => mat.resolution.copy(res));
         allAirMaterials.forEach(mat => mat.resolution.copy(res));
         allVectorMaterials.forEach(mat => mat.resolution.copy(res));
         allRotationMaterials.forEach(mat => mat.resolution.copy(res));
@@ -716,6 +719,7 @@
         
         allFeedMaterials = [];
         allAirMaterials = [];
+        allShortMaterials = [];
         lineArrowheads = [];
         allVectorMaterials = [];
         allRotationMaterials = [];
@@ -924,7 +928,7 @@
                 if (prevQ !== curQ && Math.max(prevZ, curZ) > materialThickness) {
                     const radStart = (prevQ + 90) * (Math.PI / 180);
                     const radEnd = (curQ + 90) * (Math.PI / 180);
-                    const radius = vLen * 0.6; 
+                    const radius = getArcRadius();
                     const segments = 24;
                     const angleDiff = radEnd - radStart;
                     const arcPoints = [];
@@ -1012,13 +1016,14 @@
                 let isShort = (category === 'SHORT_SEGMENTS');
                 const lineMat = new THREE.LineMaterial({
                     color: getColorForCategory(category).getHex(),
-                    linewidth: isShort ? globalFeedThickness * 1.5 : (isAirCategory ? globalAirThickness : globalFeedThickness),
+                    linewidth: isShort ? globalShortThickness : (isAirCategory ? globalAirThickness : globalFeedThickness),
                     resolution: res,
                     transparent: true,
                     opacity: 1
                 });
                 materialsMap.set(groupKey, lineMat);
-                if (isAirCategory) allAirMaterials.push(lineMat);
+                if (isShort) allShortMaterials.push(lineMat);
+                else if (isAirCategory) allAirMaterials.push(lineMat);
                 else allFeedMaterials.push(lineMat);
             }
             mat = materialsMap.get(groupKey);
