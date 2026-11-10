@@ -40,15 +40,47 @@ properties = {
       title: "Rotation Q Feedrate",
       description: "Rotation speed of the Q1 axis when rotating in the air above a corner (deg/min).",
       type: "number",
-      value: 12000,
+      value: 72000,
       group: "General Speeds"
   },
   highFeedrate: {
       title: "XY Feedrate Above Material",
       description: "Feedrate for rapid moves in the air between contours.",
       type: "number",
-      value: 3000,
+      value: 7200,
       group: "General Speeds"
+  },
+
+  // --- ARC RADIUS MODULATION (2ND STAGE) ---
+  safeArcRadius: {
+      title: "Safe Radius Dimension",
+      description: "Arcs with a radius equal to or larger than this will use the Safe Arc Speed.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(30.0, MM),
+      group: "Arc Radius Modulation"
+  },
+  difficultArcRadius: {
+      title: "Difficult Radius Dimension",
+      description: "Arcs with a radius equal to or smaller than this will use the Difficult Arc Speed.",
+      type: "spatial",
+      scope: "post",
+      value: toPreciseUnit(10.0, MM),
+      group: "Arc Radius Modulation"
+  },
+  safeArcSpeedPercent: {
+      title: "Safe Radius Speed (%)",
+      description: "Percentage multiplier for arcs at or above the Safe Radius.",
+      type: "number",
+      value: 90,
+      group: "Arc Radius Modulation"
+  },
+  difficultArcSpeedPercent: {
+      title: "Difficult Radius Speed (%)",
+      description: "Percentage multiplier for arcs at or below the Difficult Radius.",
+      type: "number",
+      value: 33,
+      group: "Arc Radius Modulation"
   },
 
   // --- ARC LINEARIZATION RANGE ---
@@ -81,14 +113,14 @@ properties = {
       title: "Feed at Top",
       description: "Cutting feedrate at this level (mm/min).",
       type: "number",
-      value: 1500,
+      value: 4800,
       group: "Operation at Top"
   },
   arcFeedPercentTop: {
-      title: "Arc Feed Percentage (%)",
-      description: "Percentage of the top feedrate to use when cutting arcs at the top level (0-100%). Modulates arc speed.",
+      title: "Arc Base Feed Percent (%)",
+      description: "Base percentage of the top feedrate for arcs before radius modulation (0-100%).",
       type: "number",
-      value: 100,
+      value: 90,
       group: "Operation at Top"
   },
   liftAtCornerTop: {
@@ -101,7 +133,7 @@ properties = {
   },
   minLinearRadiusTop: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable. Safe default: knife tip width (narrowest part).",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
       type: "spatial",
       scope: "post",
       value: toPreciseUnit(1.0, MM),
@@ -113,14 +145,14 @@ properties = {
       title: "Feed at Bottom",
       description: "Cutting feedrate at this level (mm/min).",
       type: "number",
-      value: 1000,
+      value: 3000,
       group: "Operation at Bottom"
   },
   arcFeedPercentBottom: {
-      title: "Arc Feed Percentage (%)",
-      description: "Percentage of the bottom feedrate to use when cutting arcs at the bottom level (0-100%). Modulates arc speed.",
+      title: "Arc Base Feed Percent (%)",
+      description: "Base percentage of the bottom feedrate for arcs before radius modulation (0-100%).",
       type: "number",
-      value: 70,
+      value: 50,
       group: "Operation at Bottom"
   },
   liftAtCornerBottom: {
@@ -133,7 +165,7 @@ properties = {
   },
   minLinearRadiusBottom: {
       title: "Absolute Minimum Radius",
-      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable. Safe default: knife maximum width (widest part).",
+      description: "Radii smaller than this threshold will be converted into a single segment. Set 0 to disable.",
       type: "spatial",
       scope: "post",
       value: toPreciseUnit(6.0, MM),
@@ -197,7 +229,8 @@ var KNIFE_OFFSET_RAD = -Math.PI / 2.0;
 //var c_rad = KNIFE_OFFSET_RAD; 
 var c_rad = 0;
 var isRapid = false;
-var isProcessingArc = false; // Flag to determine if current line is part of a linearized arc
+var isProcessingArc = false; 
+var currentArcRadius = undefined; 
 
 var pendingPlungeZ = undefined;
 var lastOutputZ = undefined; 
@@ -217,20 +250,12 @@ function getDynamicParameter(currentZ, topValue, bottomValue) {
     engagement = kHeight;
   }
 
-  // Get knife width from post processor properties
   var wTop = getProperty("knifeWidthTop");
   var wBot = getProperty("knifeWidthBottom");
 
-  // 1. Calculate blade width at current cutting level (material surface)
   var currentWidth = wBot + (wTop - wBot) * (engagement / kHeight);
-
-  // 2. Cross-section area of the knife currently engaged in material (trapezoid area)
   var engagedArea = ((wBot + currentWidth) / 2) * engagement;
-
-  // 3. Total cross-section area of the knife
   var totalArea = ((wBot + wTop) / 2) * kHeight;
-
-  // 4. Non-linear coefficient (0.0 - 1.0) based on physical material resistance
   var ratio = engagedArea / totalArea;
 
   return topValue + ((bottomValue - topValue) * ratio);
@@ -241,12 +266,34 @@ function calculateDynamicFeed(currentZ) {
   return Math.round(dynamicFeed * 100) / 100;
 }
 
-function calculateDynamicArcFeed(currentZ) {
+function calculateDynamicArcFeed(currentZ, radius) {
+  // 1. STAGE ONE: Depth modulation
   var dynamicFeed = getDynamicParameter(currentZ, getProperty("speedAtTop"), getProperty("speedAtBottom"));
   var dynamicPercent = getDynamicParameter(currentZ, getProperty("arcFeedPercentTop"), getProperty("arcFeedPercentBottom"));
   
-  var arcFeed = dynamicFeed * (dynamicPercent / 100.0);
-  return Math.round(arcFeed * 100) / 100;
+  var baseArcFeed = dynamicFeed * (dynamicPercent / 100.0);
+
+  // 2. STAGE TWO: Radius modulation
+  var safeR = getProperty("safeArcRadius");
+  var diffR = getProperty("difficultArcRadius");
+  var safePct = getProperty("safeArcSpeedPercent");
+  var diffPct = getProperty("difficultArcSpeedPercent");
+
+  var radiusRatio = 1.0;
+  if (radius <= diffR) {
+      radiusRatio = 0.0;
+  } else if (radius >= safeR) {
+      radiusRatio = 1.0;
+  } else if (safeR > diffR) { 
+      radiusRatio = (radius - diffR) / (safeR - diffR);
+  }
+
+  var radiusPercent = diffPct + (safePct - diffPct) * radiusRatio;
+  
+  // Final calculation
+  var finalArcFeed = baseArcFeed * (radiusPercent / 100.0);
+  
+  return Math.round(finalArcFeed * 100) / 100;
 }
 
 function updateC(target_rad, currentZ) {
@@ -433,9 +480,11 @@ function onLinear(_x, _y, _z, feed) {
   var z = zOutput.format(_z); 
 
   if (x || y || z) {
-    // If it's a travel move, use highFeedrate. 
-    // If it's a linearized arc, use dynamic arc feed. Otherwise, use normal dynamic feed.
-    var activeFeed = isTravel ? getProperty("highFeedrate") : (isProcessingArc ? calculateDynamicArcFeed(_z) : calculateDynamicFeed(_z));
+    var activeFeed = isTravel ? getProperty("highFeedrate") : 
+                     (isProcessingArc && currentArcRadius !== undefined ? 
+                      calculateDynamicArcFeed(_z, currentArcRadius) : 
+                      calculateDynamicFeed(_z));
+                      
     writeBlock(gMotionModal.format(1), x, y, z, feedOutput.format(activeFeed));
   }
 }
@@ -444,14 +493,12 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
   var radius = getCircularRadius();
   var activeZ = (pendingPlungeZ !== undefined) ? pendingPlungeZ : z;
 
-  // 1. Check Absolute Minimum Radius (physical knife limit)
   var dynamicMinLinearRadius = getDynamicParameter(activeZ, getProperty("minLinearRadiusTop"), getProperty("minLinearRadiusBottom"));
   if (radius <= dynamicMinLinearRadius) {
     onLinear(x, y, z, 0); 
     return;
   }
   
-  // 2. Linearization in specified radius range (e.g. for ellipses / splines)
   if (getProperty("enableArcLinearization")) {
     var minR = getProperty("minArcRadiusRange");
     var maxR = getProperty("maxArcRadiusRange");
@@ -461,14 +508,15 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       if (hasParameter("operation:tolerance")) {
         t = getParameter("operation:tolerance");
       }
+      currentArcRadius = radius;
       isProcessingArc = true;
       linearize(t);
       isProcessingArc = false;
+      currentArcRadius = undefined;
       return;
     }
   }
 
-  // 3. Native G2/G3 interpolation for the rest of arcs
   switch (getCircularPlane()) {
   case PLANE_XY:
     var arcLength = getCircularArcLength();
@@ -503,8 +551,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       c_rad += arcAngle;
     }
     
-    // Compute specific feedrate for circular movements
-    var outputFeed = calculateDynamicArcFeed(z);
+    var outputFeed = calculateDynamicArcFeed(z, radius);
     
     feedOutput.reset(); 
     writeBlock(gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), cOutput.format(toDeg(c_rad)), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(outputFeed));
@@ -514,9 +561,11 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
     if (hasParameter("operation:tolerance")) {
       t = getParameter("operation:tolerance");
     }
+    currentArcRadius = radius;
     isProcessingArc = true;
     linearize(t);
     isProcessingArc = false;
+    currentArcRadius = undefined;
   }
 }
 
